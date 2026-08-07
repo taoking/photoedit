@@ -11,27 +11,39 @@ final class EditorViewModel: ObservableObject {
     @Published var isShowingBefore = false
     @Published private(set) var isRendering = false
     @Published private(set) var isExporting = false
+    @Published private(set) var histogram = Histogram.empty
     @Published var exportedImage: ExportedImage?
     @Published var errorMessage: String?
 
     let lutRepository: LUTRepository
+    let presetRepository: PresetRepository
+    let adjustmentClipboard: AdjustmentClipboard
     let lutPreviewCache = LUTPreviewCache()
 
     private let pipeline: ImagePipeline
     private var renderTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
+    private var histogramTask: Task<Void, Never>?
     private var renderGeneration = 0
     private var undoStack: [EditState] = []
     private var pendingContinuousUndo: EditState?
 
-    init(lutRepository: LUTRepository = LUTRepository(), pipeline: ImagePipeline = .shared) {
+    init(
+        lutRepository: LUTRepository = LUTRepository(),
+        presetRepository: PresetRepository = PresetRepository(),
+        adjustmentClipboard: AdjustmentClipboard = AdjustmentClipboard(),
+        pipeline: ImagePipeline = .shared
+    ) {
         self.lutRepository = lutRepository
+        self.presetRepository = presetRepository
+        self.adjustmentClipboard = adjustmentClipboard
         self.pipeline = pipeline
     }
 
     deinit {
         renderTask?.cancel()
         exportTask?.cancel()
+        histogramTask?.cancel()
     }
 
     var canUndo: Bool { !undoStack.isEmpty }
@@ -75,6 +87,7 @@ final class EditorViewModel: ObservableObject {
         change(&state)
         guard state != previous else { return }
         if pendingContinuousUndo == nil { undoStack.append(previous) }
+        lutPreviewCache.clear()
         schedulePreviewRender()
     }
 
@@ -85,6 +98,7 @@ final class EditorViewModel: ObservableObject {
 
     func updateContinuous(_ change: (inout EditState) -> Void) {
         change(&state)
+        lutPreviewCache.clear()
         schedulePreviewRender()
     }
 
@@ -98,6 +112,7 @@ final class EditorViewModel: ObservableObject {
         guard let previous = undoStack.popLast() else { return }
         pendingContinuousUndo = nil
         state = previous
+        lutPreviewCache.clear()
         schedulePreviewRender()
     }
 
@@ -105,6 +120,7 @@ final class EditorViewModel: ObservableObject {
         guard state != .initial else { return }
         undoStack.append(state)
         state.reset()
+        lutPreviewCache.clear()
         schedulePreviewRender()
     }
 
@@ -113,6 +129,77 @@ final class EditorViewModel: ObservableObject {
             state.lut.selectedLUTID = id
             if id == nil { state.lut.intensity = 1 }
         }
+    }
+
+    func resetHSL(_ channel: HSLChannel) {
+        update { $0.hsl.reset(channel) }
+    }
+
+    func resetAllHSL() {
+        update { $0.hsl.resetAll() }
+    }
+
+    func addCurvePoint(channel: ToneCurveChannel, x: Double, y: Double) {
+        update { state in
+            var curve = state.curves[channel]
+            curve.addPoint(x: x, y: y)
+            state.curves[channel] = curve
+        }
+    }
+
+    func moveCurvePoint(channel: ToneCurveChannel, id: String, x: Double, y: Double) {
+        updateContinuous { state in
+            var curve = state.curves[channel]
+            curve.movePoint(id: id, x: x, y: y)
+            state.curves[channel] = curve
+        }
+    }
+
+    func removeCurvePoint(channel: ToneCurveChannel, id: String) {
+        update { state in
+            var curve = state.curves[channel]
+            curve.removePoint(id: id)
+            state.curves[channel] = curve
+        }
+    }
+
+    func resetCurves() {
+        update { $0.curves.resetAll() }
+    }
+
+    func copyAllAdjustments() {
+        adjustmentClipboard.copy(from: state)
+    }
+
+    func pasteAdjustments(groups: Set<AdjustmentGroup> = Set(AdjustmentGroup.allCases)) {
+        guard let pasted = adjustmentClipboard.paste(into: state, groups: groups), pasted != state else { return }
+        undoStack.append(state)
+        state = pasted
+        lutPreviewCache.clear()
+        schedulePreviewRender()
+    }
+
+    func createPreset(name: String, includesTransform: Bool) {
+        do {
+            try presetRepository.create(name: name, state: state, includesTransform: includesTransform)
+        } catch {
+            present(error)
+        }
+    }
+
+    func applyPreset(id: UUID) {
+        guard let preset = presetRepository.preset(id: id) else { return }
+        let applied = preset.payload.applying(to: state)
+        guard applied != state else { return }
+        undoStack.append(state)
+        state = applied
+        lutPreviewCache.clear()
+        schedulePreviewRender()
+    }
+
+    func importPreset(url: URL) {
+        do { try presetRepository.importPreset(from: url) }
+        catch { present(error) }
     }
 
     func importLUT(url: URL) {
@@ -179,6 +266,7 @@ final class EditorViewModel: ObservableObject {
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
         renderOriginalPreview()
+        scheduleHistogram()
         schedulePreviewRender()
     }
 
@@ -244,6 +332,27 @@ final class EditorViewModel: ObservableObject {
     private func cancelRender() {
         renderTask?.cancel()
         renderGeneration += 1
+    }
+
+    private func scheduleHistogram() {
+        histogramTask?.cancel()
+        guard let asset else {
+            histogram = .empty
+            return
+        }
+        let id = asset.id
+        histogramTask = Task { [weak self, pipeline, asset] in
+            do {
+                try await Task.sleep(nanoseconds: 160_000_000)
+                let computed = try await pipeline.histogram(for: asset.fullResolutionImage, maximumDimension: 512)
+                guard !Task.isCancelled, self?.asset?.id == id else { return }
+                self?.histogram = computed
+            } catch is CancellationError {
+                // Replaced by a newly loaded image.
+            } catch {
+                self?.histogram = .empty
+            }
+        }
     }
 
     private func present(_ error: Error) {

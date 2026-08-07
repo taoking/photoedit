@@ -16,6 +16,21 @@ enum RenderMode: Sendable, Equatable {
     }
 }
 
+struct Histogram: Equatable, Sendable {
+    static let binCount = 256
+    var red: [Int]
+    var green: [Int]
+    var blue: [Int]
+    var luminance: [Int]
+
+    static let empty = Histogram(
+        red: Array(repeating: 0, count: binCount),
+        green: Array(repeating: 0, count: binCount),
+        blue: Array(repeating: 0, count: binCount),
+        luminance: Array(repeating: 0, count: binCount)
+    )
+}
+
 /// 单例 actor 串行使用一个 Metal-backed CIContext，避免 Slider 变化反复分配 GPU context。
 actor ImagePipeline {
     static let shared = ImagePipeline()
@@ -56,6 +71,37 @@ actor ImagePipeline {
         return output
     }
 
+    /// 直方图只读取下采样 Preview Source；不参与 Slider 的全分辨率渲染路径。
+    func histogram(for source: CIImage, maximumDimension: Int = 512) throws -> Histogram {
+        let image = downsample(normalizedExtent(source), maximumDimension: maximumDimension)
+        guard let cgImage = context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: workingColorSpace),
+              let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            throw ImageEditorError.renderFailed
+        }
+        var histogram = Histogram.empty
+        let length = CFDataGetLength(data)
+        let rowBytes = cgImage.bytesPerRow
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0, length >= rowBytes * height else { return histogram }
+        for y in 0 ..< height {
+            let row = bytes.advanced(by: y * rowBytes)
+            for x in 0 ..< width {
+                let pixel = row.advanced(by: x * 4)
+                let red = Int(pixel[0])
+                let green = Int(pixel[1])
+                let blue = Int(pixel[2])
+                let luminance = min(255, max(0, Int((0.2126 * Double(red) + 0.7152 * Double(green) + 0.0722 * Double(blue)).rounded())))
+                histogram.red[red] += 1
+                histogram.green[green] += 1
+                histogram.blue[blue] += 1
+                histogram.luminance[luminance] += 1
+            }
+        }
+        return histogram
+    }
+
     private func applyAdjustments(to source: CIImage, state: EditState, lut: LUT?) throws -> CIImage {
         var image = source
         image = try applyingFilter("CIExposureAdjust", to: image, values: [kCIInputEVKey: AdjustmentMapper.exposureEV(state.light.exposure)])
@@ -75,6 +121,8 @@ actor ImagePipeline {
             )
         ])
         image = try applyingFilter("CIVibrance", to: image, values: ["inputAmount": AdjustmentMapper.vibrance(state.color.vibrance)])
+        image = try HSLProcessor.apply(state.hsl, to: image)
+        image = try ToneCurveProcessor.apply(state.curves, to: image, workingColorSpace: workingColorSpace)
 
         if let lut, state.lut.intensity > 0 {
             let lutImage = try LUTProcessor.apply(lut, to: image, workingColorSpace: workingColorSpace)

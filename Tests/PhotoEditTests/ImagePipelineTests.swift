@@ -45,6 +45,43 @@ final class ImagePipelineTests: XCTestCase {
         XCTAssertEqual(source.extent.width, 1024)
     }
 
+    func testHSLDesaturatesSelectedRedRange() async throws {
+        let redSource = CIImage(color: CIColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1)).cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
+        var state = EditState()
+        state.hsl.red.saturation = -100
+        let pipeline = ImagePipeline()
+        let output = try await pipeline.render(image: redSource, state: state, lut: nil, mode: .preview(maximumDimension: 128))
+        let pixel = pixelBytes(output)
+        XCTAssertLessThanOrEqual(abs(Int(pixel[0]) - Int(pixel[1])), 2)
+        XCTAssertLessThanOrEqual(abs(Int(pixel[1]) - Int(pixel[2])), 2)
+    }
+
+    func testToneCurveChangesSelectedChannel() async throws {
+        var state = EditState()
+        var redCurve = state.curves.red
+        redCurve.movePoint(id: "end", x: 1, y: 0.4)
+        state.curves.red = redCurve
+        let pipeline = ImagePipeline()
+        let base = try await pipeline.render(image: source, state: .initial, lut: nil, mode: .preview(maximumDimension: 128))
+        let curved = try await pipeline.render(image: source, state: state, lut: nil, mode: .preview(maximumDimension: 128))
+        XCTAssertLessThan(pixelBytes(curved)[0], pixelBytes(base)[0])
+        XCTAssertLessThanOrEqual(abs(Int(pixelBytes(curved)[1]) - Int(pixelBytes(base)[1])), 1)
+    }
+
+    func testHistogramUsesPreviewSource() async throws {
+        let pipeline = ImagePipeline()
+        let histogram = try await pipeline.histogram(for: source, maximumDimension: 512)
+        XCTAssertEqual(histogram.red.reduce(0, +), 512 * 320)
+        XCTAssertEqual(histogram.green.reduce(0, +), 512 * 320)
+        XCTAssertEqual(histogram.blue.reduce(0, +), 512 * 320)
+        XCTAssertEqual(histogram.luminance.reduce(0, +), 512 * 320)
+        let redPeak = histogram.red.enumerated().max { $0.element < $1.element }?.offset
+        let greenPeak = histogram.green.enumerated().max { $0.element < $1.element }?.offset
+        let bluePeak = histogram.blue.enumerated().max { $0.element < $1.element }?.offset
+        XCTAssertNotEqual(redPeak, greenPeak)
+        XCTAssertNotEqual(greenPeak, bluePeak)
+    }
+
     func testJPEGExportCreatesNewDecodableFile() async throws {
         let asset = ImageAsset(
             id: UUID(), sourceName: "Test", fullResolutionImage: source, originalData: Data(), pixelWidth: 1024, pixelHeight: 640, metadata: [:], sourceType: .png

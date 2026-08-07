@@ -10,6 +10,8 @@ immutable original CIImage (EXIF orientation applied at load)
 → contrast + saturation
 → temperature / tint
 → vibrance
+→ eight-channel HSL mixer
+→ master / red / green / blue tone curves
 → optional LUT and 0…100% alpha blend
 → sharpness
 → vignette

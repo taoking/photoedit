@@ -3,7 +3,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum EditorTool: String, CaseIterable, Identifiable {
-    case adjust = "调整"
+    case adjust = "基本"
+    case hsl = "HSL"
+    case curves = "曲线"
+    case presets = "预设"
     case lut = "LUT"
     case crop = "裁切"
 
@@ -15,11 +18,16 @@ struct EditorView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingImageImporter = false
     @State private var showingLUTImporter = false
+    @State private var showingPresetImporter = false
     @State private var showingExportOptions = false
     @State private var showingFileExporter = false
     @State private var exportDocument = ImageExportDocument()
     @State private var exportType: UTType = .jpeg
     @State private var exportFilename = "Photo-edited.jpg"
+    @State private var showingPresetFileExporter = false
+    @State private var presetDocument = PresetDocument()
+    @State private var presetFilename = "Preset.json"
+    @State private var showingSelectivePaste = false
     @State private var tool: EditorTool = .adjust
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
@@ -61,6 +69,10 @@ struct EditorView: View {
             if case let .success(url) = result { model.importLUT(url: url) }
             else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
         }
+        .fileImporter(isPresented: $showingPresetImporter, allowedContentTypes: [.json]) { result in
+            if case let .success(url) = result { model.importPreset(url: url) }
+            else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
+        }
         .sheet(isPresented: $showingExportOptions) {
             ExportOptionsView(model: model)
         }
@@ -84,6 +96,17 @@ struct EditorView: View {
             defaultFilename: exportFilename
         ) { result in
             if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
+        }
+        .fileExporter(
+            isPresented: $showingPresetFileExporter,
+            document: presetDocument,
+            contentType: .json,
+            defaultFilename: presetFilename
+        ) { result in
+            if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
+        }
+        .sheet(isPresented: $showingSelectivePaste) {
+            SelectivePasteView(model: model)
         }
         .alert("发生错误", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -149,12 +172,25 @@ struct EditorView: View {
             Picker("工具", selection: $tool) {
                 ForEach(EditorTool.allCases) { Text($0.rawValue).tag($0) }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .padding([.horizontal, .top])
 
             Group {
                 switch tool {
                 case .adjust: AdjustmentPanel(model: model)
+                case .hsl: HSLPanel(model: model)
+                case .curves: ToneCurvePanel(model: model)
+                case .presets:
+                    PresetPanel(
+                        model: model,
+                        showingImporter: $showingPresetImporter,
+                        exportPreset: { id, name in
+                            guard let data = try? model.presetRepository.exportData(id: id) else { return }
+                            presetDocument = PresetDocument(data: data)
+                            presetFilename = name + ".json"
+                            showingPresetFileExporter = true
+                        }
+                    )
                 case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
                 case .crop: CropPanel(model: model)
                 }
@@ -186,6 +222,19 @@ struct EditorView: View {
                     showingExportOptions = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
+                }
+                Menu {
+                    Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
+                    Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
+                        model.pasteAdjustments()
+                    }
+                    .disabled(!model.adjustmentClipboard.hasAdjustments)
+                    Button("选择性粘贴", systemImage: "checklist") {
+                        showingSelectivePaste = true
+                    }
+                    .disabled(!model.adjustmentClipboard.hasAdjustments)
+                } label: {
+                    Image(systemName: "doc.on.doc")
                 }
             }
         }
@@ -224,6 +273,9 @@ private struct AdjustmentPanel: View {
                     slider("锐化", value: detail(\.sharpness), range: 0...100)
                     slider("暗角", value: effects(\.vignette), range: -100...100)
                 }
+                HistogramView(histogram: model.histogram)
+                    .frame(height: 64)
+                    .accessibilityLabel("RGB 和亮度直方图")
             }
             .padding()
         }
@@ -273,6 +325,298 @@ private struct AdjustmentPanel: View {
         Binding(get: { model.state.effects[keyPath: keyPath] }, set: { value in
             model.updateContinuous { $0.effects[keyPath: keyPath] = value }
         })
+    }
+}
+
+private struct HistogramView: View {
+    let histogram: Histogram
+
+    var body: some View {
+        GeometryReader { geometry in
+            Canvas { context, size in
+                let maximum = max(1, histogram.red.max() ?? 0, histogram.green.max() ?? 0, histogram.blue.max() ?? 0, histogram.luminance.max() ?? 0)
+                draw(histogram.luminance, color: .gray.opacity(0.8), in: &context, size: size, maximum: maximum)
+                draw(histogram.red, color: .red.opacity(0.65), in: &context, size: size, maximum: maximum)
+                draw(histogram.green, color: .green.opacity(0.55), in: &context, size: size, maximum: maximum)
+                draw(histogram.blue, color: .blue.opacity(0.55), in: &context, size: size, maximum: maximum)
+            }
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func draw(_ bins: [Int], color: Color, in context: inout GraphicsContext, size: CGSize, maximum: Int) {
+        guard bins.count == Histogram.binCount else { return }
+        var path = Path()
+        for (index, bin) in bins.enumerated() {
+            let x = size.width * CGFloat(index) / CGFloat(Histogram.binCount - 1)
+            let y = size.height * (1 - CGFloat(bin) / CGFloat(maximum))
+            if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+            else { path.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        context.stroke(path, with: .color(color), lineWidth: 1)
+    }
+}
+
+private struct HSLPanel: View {
+    @ObservedObject var model: EditorViewModel
+    @State private var channel: HSLChannel = .red
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Color Mixer").font(.headline)
+                    Spacer()
+                    Button("重置 \(channel.title)") { model.resetHSL(channel) }
+                    Button("重置全部") { model.resetAllHSL() }
+                }
+                Picker("颜色", selection: $channel) {
+                    ForEach(HSLChannel.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                hslSlider("色相", keyPath: \.hue)
+                hslSlider("饱和度", keyPath: \.saturation)
+                hslSlider("明度", keyPath: \.luminance)
+                Text("所有参数均保存在 EditState；色相选择以软边界覆盖相邻颜色。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding()
+        }
+    }
+
+    private func hslSlider(_ title: String, keyPath: WritableKeyPath<HSLChannelAdjustment, Double>) -> some View {
+        let value = Binding<Double>(
+            get: { model.state.hsl[channel][keyPath: keyPath] },
+            set: { newValue in
+                model.updateContinuous { state in
+                    var adjustment = state.hsl[channel]
+                    adjustment[keyPath: keyPath] = newValue
+                    state.hsl[channel] = adjustment
+                }
+            }
+        )
+        return VStack(spacing: 2) {
+            HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(0)))").foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: -100...100, onEditingChanged: { editing in
+                if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
+            })
+        }
+    }
+}
+
+private struct ToneCurvePanel: View {
+    @ObservedObject var model: EditorViewModel
+    @State private var channel: ToneCurveChannel = .master
+
+    private var curve: ToneCurve { model.state.curves[channel] }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Picker("通道", selection: $channel) {
+                    ForEach(ToneCurveChannel.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Button("重置全部") { model.resetCurves() }
+            }
+            .padding(.horizontal)
+
+            GeometryReader { geometry in
+                let size = geometry.size
+                ZStack {
+                    CurveGrid()
+                    CurvePath(points: curve.points)
+                        .stroke(channelColor, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+                    ForEach(curve.points) { point in
+                        Circle()
+                            .fill(.white)
+                            .overlay(Circle().stroke(channelColor, lineWidth: 2))
+                            .frame(width: 16, height: 16)
+                            .position(x: size.width * point.x, y: size.height * (1 - point.y))
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        model.beginContinuousEdit()
+                                        model.moveCurvePoint(
+                                            channel: channel,
+                                            id: point.id,
+                                            x: Double(value.location.x / size.width),
+                                            y: Double(1 - value.location.y / size.height)
+                                        )
+                                    }
+                                    .onEnded { _ in model.endContinuousEdit() }
+                            )
+                            .onLongPressGesture {
+                                model.removeCurvePoint(channel: channel, id: point.id)
+                            }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .frame(height: 140)
+            .padding(.horizontal)
+
+            HStack {
+                Button("添加控制点", systemImage: "plus") {
+                    let largestGap = zip(curve.points, curve.points.dropFirst()).max { ($0.1.x - $0.0.x) < ($1.1.x - $1.0.x) }
+                    if let gap = largestGap {
+                        let x = (gap.0.x + gap.1.x) / 2
+                        model.addCurvePoint(channel: channel, x: x, y: curve.value(at: x))
+                    }
+                }
+                Text("拖动调整；长按中间点删除。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding([.horizontal, .bottom])
+        }
+    }
+
+    private var channelColor: Color {
+        switch channel {
+        case .master: .primary
+        case .red: .red
+        case .green: .green
+        case .blue: .blue
+        }
+    }
+}
+
+private struct CurveGrid: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0 ... 4 {
+                let point = CGFloat(index) / 4
+                var vertical = Path(); vertical.move(to: CGPoint(x: size.width * point, y: 0)); vertical.addLine(to: CGPoint(x: size.width * point, y: size.height))
+                var horizontal = Path(); horizontal.move(to: CGPoint(x: 0, y: size.height * point)); horizontal.addLine(to: CGPoint(x: size.width, y: size.height * point))
+                context.stroke(vertical, with: .color(.secondary.opacity(0.2)), lineWidth: 1)
+                context.stroke(horizontal, with: .color(.secondary.opacity(0.2)), lineWidth: 1)
+            }
+        }
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct CurvePath: Shape {
+    let points: [CurvePoint]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: CGPoint(x: rect.width * first.x, y: rect.height * (1 - first.y)))
+        for point in points.dropFirst() {
+            path.addLine(to: CGPoint(x: rect.width * point.x, y: rect.height * (1 - point.y)))
+        }
+        return path
+    }
+}
+
+private struct PresetPanel: View {
+    @ObservedObject var model: EditorViewModel
+    @Binding var showingImporter: Bool
+    let exportPreset: (UUID, String) -> Void
+    @State private var showingCreator = false
+    @State private var renaming: Preset?
+    @State private var renameText = ""
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Button("新建预设", systemImage: "plus") { showingCreator = true }
+                Button("导入", systemImage: "square.and.arrow.down") { showingImporter = true }
+                Spacer()
+                Text("\(model.presetRepository.presets.count) 个预设").font(.caption).foregroundStyle(.secondary)
+            }
+            .padding([.horizontal, .top])
+            if model.presetRepository.presets.isEmpty {
+                ContentUnavailableView("尚无预设", systemImage: "slider.horizontal.3", description: Text("从当前调整创建一个可复用预设。"))
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(model.presetRepository.presets) { preset in
+                            Button { model.applyPreset(id: preset.id) } label: {
+                                HStack {
+                                    Image(systemName: preset.isFavorite ? "star.fill" : "slider.horizontal.3")
+                                        .foregroundStyle(preset.isFavorite ? .yellow : .secondary)
+                                    Text(preset.name).foregroundStyle(.primary)
+                                    Spacer()
+                                    Text(preset.payload.transform == nil ? "不含裁切" : "含裁切").font(.caption).foregroundStyle(.secondary)
+                                }
+                                .padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                            }
+                            .contextMenu {
+                                Button(preset.isFavorite ? "取消收藏" : "收藏", systemImage: preset.isFavorite ? "star.slash" : "star") { try? model.presetRepository.toggleFavorite(id: preset.id) }
+                                Button("重命名", systemImage: "pencil") { renaming = preset; renameText = preset.name }
+                                Button("导出 JSON", systemImage: "square.and.arrow.up") { exportPreset(preset.id, preset.name) }
+                                Button("删除", systemImage: "trash", role: .destructive) { try? model.presetRepository.delete(id: preset.id) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+        .sheet(isPresented: $showingCreator) { PresetCreatorView(model: model) }
+        .alert("重命名预设", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("名称", text: $renameText)
+            Button("取消", role: .cancel) { renaming = nil }
+            Button("保存") {
+                if let preset = renaming { try? model.presetRepository.rename(id: preset.id, to: renameText) }
+                renaming = nil
+            }
+        }
+    }
+}
+
+private struct PresetCreatorView: View {
+    @ObservedObject var model: EditorViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var includesTransform = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("预设名称", text: $name)
+                Toggle("包含裁切、旋转与翻转", isOn: $includesTransform)
+                Text("默认保存光线、颜色、HSL、曲线、LUT、细节和效果。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .navigationTitle("新建预设")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { model.createPreset(name: name, includesTransform: includesTransform); dismiss() }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct SelectivePasteView: View {
+    @ObservedObject var model: EditorViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var groups = Set(AdjustmentGroup.allCases)
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(AdjustmentGroup.allCases) { group in
+                    Toggle(group.title, isOn: Binding(
+                        get: { groups.contains(group) },
+                        set: { enabled in if enabled { groups.insert(group) } else { groups.remove(group) } }
+                    ))
+                }
+            }
+            .navigationTitle("选择性粘贴")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("粘贴") { model.pasteAdjustments(groups: groups); dismiss() }
+                }
+            }
+        }
     }
 }
 

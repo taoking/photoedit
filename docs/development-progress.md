@@ -39,7 +39,42 @@ Known Limitations:
 
 ## Phase 2
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 2 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 22 tests, 0 failures (includes Phase 1 regression).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+PHASE 2 ACCEPTANCE
+
+- [PASS] Red / Orange / Yellow / Green / Aqua / Blue / Purple / Magenta each have Codable Hue, Saturation and Luminance state.
+- [PASS] Single-channel and global HSL reset are implemented outside SwiftUI views.
+- [PASS] Master, Red, Green and Blue curves support adding, moving, non-crossing X positions, protected endpoints, deleting inner points and reset.
+- [PASS] RGB and luminance histograms are computed from a 512px Preview Source, not full-resolution Slider renders.
+- [PASS] Presets create, apply, rename, delete, favorite, JSON import/export and exclude transform by default.
+- [PASS] Copy All, Paste All and selective group paste cover Light, Color, HSL, Curve, LUT, Detail, Effects and Crop.
+- [PASS] Phase 1 parser, pipeline, crop, LUT and export regression coverage remains green.
+
+Implemented:
+
+- HSL `CIColorKernel` with soft hue/saturation selection, exercised by a red desaturation render test.
+- Serializable, constrained arbitrary-point tone curves rendered as 64³ Core Image Color Cube.
+- Throttled RGB/luminance Preview Source histogram.
+- Codable JSON `PresetRepository`, Files import/export UI and app-local adjustment clipboard.
+- Color Mixer, curve editor, histogram, preset and selective-paste SwiftUI interfaces.
+
+Manual Verification Required:
+
+- On a physical device, inspect HSL boundary behavior for real skin tones, oranges, aqua/blue and low-saturation pixels.
+- Manually judge tone-curve touch ergonomics, point deletion, histogram responsiveness and preset Files/Share workflow.
+- Repeat Phase 1 real-photo/Photos-permission, 12MP/24MP/48MP performance and export visual checks.
+
+Known Limitations:
+
+- The Phase 2 HSL kernel uses Core Image Kernel Language because no native filter can isolate the requested eight HSL ranges. Its deprecation annotation is explicitly silenced by Apple’s `CI_SILENCE_GL_DEPRECATION` setting; its processor boundary is isolated for a future Metal replacement.
+- The simulator build emits Xcode's non-actionable AppIntents metadata-extraction warning because this app intentionally has no AppIntents dependency.
 
 ## Phase 3
 
