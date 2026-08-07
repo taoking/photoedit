@@ -36,6 +36,8 @@ enum ExportFilenameStrategy: String, Codable, CaseIterable, Identifiable, Sendab
 
 struct ExportSettings: Codable, Equatable, Sendable {
     var format: ExportFormat = .jpeg
+    /// 默认 SDR；HDR 仅接受真实 HDR 源且必须编码为 10-bit HEIF。
+    var dynamicRange: ExportDynamicRange = .sdr
     /// nil 表示原始分辨率。
     var maximumDimension: Int?
     var jpegQuality: Double = 0.9
@@ -77,16 +79,34 @@ enum ImageExporter {
         sequenceNumber: Int? = nil,
         pipeline: ImagePipeline = .shared
     ) async throws -> ExportedImage {
-        let image = try await pipeline.render(
-            asset: asset,
-            state: state,
-            lut: lut,
-            technicalLUT: technicalLUT,
-            mode: .export(maximumDimension: settings.maximumDimension)
+        let plan = try HDRRendering.makePlan(
+            sourceColorSpace: asset.sourceColorSpace,
+            sourceHeadroom: asset.sourceHeadroom,
+            target: settings.dynamicRange,
+            format: settings.format
         )
-        try Task.checkCancellation()
-
-        let data = try encode(image: image, asset: asset, settings: settings)
+        let data: Data
+        switch plan.target {
+        case .sdr:
+            let image = try await pipeline.render(
+                asset: asset,
+                state: state,
+                lut: lut,
+                technicalLUT: technicalLUT,
+                dynamicRange: .sdr,
+                mode: .export(maximumDimension: settings.maximumDimension)
+            )
+            try Task.checkCancellation()
+            data = try encode(image: image, asset: asset, settings: settings)
+        case .hdr:
+            data = try await pipeline.renderHDRHEIF(
+                asset: asset,
+                state: state,
+                lut: lut,
+                technicalLUT: technicalLUT,
+                settings: settings
+            )
+        }
         let filename = settings.filename(for: asset.sourceName, sequenceNumber: sequenceNumber)
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

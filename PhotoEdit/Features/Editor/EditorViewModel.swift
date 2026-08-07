@@ -62,6 +62,8 @@ final class EditorViewModel: ObservableObject {
     }
 
     var canUndo: Bool { !undoStack.isEmpty }
+    /// HDR 源的主预览输出为 RGBA half-float；视图层请求 high dynamic range 显示。
+    var usesHDRPreview: Bool { asset?.hasHDRContent == true }
     var batchOutputURLs: [URL] {
         batchResults.compactMap {
             if case let .succeeded(_, output) = $0 { output.fileURL } else { nil }
@@ -426,6 +428,7 @@ final class EditorViewModel: ObservableObject {
                     asset: reference,
                     state: .initial,
                     lut: nil,
+                    dynamicRange: reference.hasHDRContent ? .hdr : .sdr,
                     mode: .preview(maximumDimension: 1600)
                 )
                 guard !Task.isCancelled else { return }
@@ -476,6 +479,7 @@ final class EditorViewModel: ObservableObject {
                 asset: asset,
                 state: .initial,
                 lut: nil,
+                dynamicRange: asset.hasHDRContent ? .hdr : .sdr,
                 mode: .preview(maximumDimension: 2048)
             )
             self?.originalPreviewImage = image
@@ -500,6 +504,7 @@ final class EditorViewModel: ObservableObject {
                     state: state,
                     lut: luts.creative,
                     technicalLUT: luts.technical,
+                    dynamicRange: asset.hasHDRContent ? .hdr : .sdr,
                     mode: .preview(maximumDimension: 2048)
                 )
                 guard !Task.isCancelled, self?.renderGeneration == generation else { return }

@@ -9,6 +9,7 @@ enum ColorSpaceDescriptor: String, Codable, CaseIterable, Identifiable, Sendable
     case rec709
     case extendedLinearSRGB
     case rec709HLG
+    case rec2100HLG
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum ColorSpaceDescriptor: String, Codable, CaseIterable, Identifiable, Sendable
         case .rec709: "Rec.709"
         case .extendedLinearSRGB: "Extended Linear sRGB"
         case .rec709HLG: "Rec.709 HLG"
+        case .rec2100HLG: "Rec.2100 HLG"
         }
     }
 
@@ -31,10 +33,11 @@ enum ColorSpaceDescriptor: String, Codable, CaseIterable, Identifiable, Sendable
         case .rec709: CGColorSpace(name: CGColorSpace.itur_709)!
         case .extendedLinearSRGB: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
         case .rec709HLG: CGColorSpace(name: CGColorSpace.itur_709_HLG)!
+        case .rec2100HLG: CGColorSpace(name: CGColorSpace.itur_2100_HLG)!
         }
     }
 
-    var isHDR: Bool { self == .rec709HLG || self == .extendedLinearSRGB }
+    var isHDR: Bool { self == .rec709HLG || self == .rec2100HLG || self == .extendedLinearSRGB }
 
     static func detect(_ colorSpace: CGColorSpace?) -> ColorSpaceDescriptor? {
         guard let colorSpace else { return nil }

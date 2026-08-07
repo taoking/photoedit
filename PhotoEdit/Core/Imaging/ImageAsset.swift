@@ -16,9 +16,12 @@ struct ImageAsset: @unchecked Sendable {
     let sourceType: UTType
     /// ImageIO/CIImage 可识别时保留；无 profile 的标准照片会在读取时明确附着 sRGB fallback。
     let sourceColorSpace: ColorSpaceDescriptor?
+    /// 1 为已知 SDR；大于 1 表示 Core Image 报告或推断的 HDR headroom。
+    let sourceHeadroom: Float
     let rawSource: RAWImageSource?
 
     var isRAW: Bool { rawSource != nil }
+    var hasHDRContent: Bool { sourceHeadroom > 1 || sourceColorSpace?.isHDR == true }
     var cameraMetadata: CameraMetadata? { rawSource?.metadata }
 }
 
@@ -41,19 +44,26 @@ enum ImageLoader {
                 id: UUID(), sourceName: sourceName, fullResolutionImage: image, originalData: data,
                 pixelWidth: (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? Int(image.extent.width),
                 pixelHeight: (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? Int(image.extent.height),
-                metadata: properties, sourceType: type, sourceColorSpace: ColorSpaceDescriptor.detect(image.colorSpace), rawSource: rawSource
+                metadata: properties,
+                sourceType: type,
+                sourceColorSpace: ColorSpaceDescriptor.detect(image.colorSpace),
+                sourceHeadroom: HDRRendering.sourceHeadroom(for: image, colorSpace: ColorSpaceDescriptor.detect(image.colorSpace)),
+                rawSource: rawSource
             )
         }
-        guard supportedTypes.contains(type), let loadedImage = CIImage(data: data, options: [.applyOrientationProperty: true]) else {
+        let imageOptions: [CIImageOption: Any] = [
+            .applyOrientationProperty: true,
+            .expandToHDR: true
+        ]
+        guard supportedTypes.contains(type), let loadedImage = CIImage(data: data, options: imageOptions) else {
             throw ImageEditorError.unsupportedFormat
         }
         let sourceColorSpace = ColorSpaceDescriptor.detect(loadedImage.colorSpace)
         let image: CIImage
         if sourceColorSpace == nil {
-            guard let fallbackImage = CIImage(data: data, options: [
-                .applyOrientationProperty: true,
-                .colorSpace: ColorSpaceDescriptor.sRGB.cgColorSpace
-            ]) else { throw ImageEditorError.imageLoadFailed }
+            var fallbackOptions = imageOptions
+            fallbackOptions[.colorSpace] = ColorSpaceDescriptor.sRGB.cgColorSpace
+            guard let fallbackImage = CIImage(data: data, options: fallbackOptions) else { throw ImageEditorError.imageLoadFailed }
             image = fallbackImage
         } else {
             image = loadedImage
@@ -70,6 +80,7 @@ enum ImageLoader {
             metadata: properties,
             sourceType: type,
             sourceColorSpace: sourceColorSpace ?? .sRGB,
+            sourceHeadroom: HDRRendering.sourceHeadroom(for: image, colorSpace: sourceColorSpace),
             rawSource: nil
         )
     }

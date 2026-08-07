@@ -170,7 +170,32 @@ Known Limitations:
 
 ## Phase 6
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 6 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 36 tests, 0 failures (includes Phase 1–5 regression tests and a real HEIF10 encode/decode test).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Phase 6 Acceptance:
+
+- [PASS] HDR-capable ImageIO input is expanded through Core Image, with source color descriptor and content headroom tracked separately from SDR assets.
+- [PASS] The shared pipeline now uses Extended Linear sRGB plus RGBA half-float intermediates; HDR preview renders a half-float `CGImage` and the editor requests `UIImageView` high dynamic range presentation.
+- [PASS] SDR remains the default for JPEG/HEIF. HDR source content is tone mapped to headroom 1.0 after the edit chain, and SDR preview still renders RGBA8 sRGB.
+- [PASS] HDR export rejects SDR input and non-HEIF formats, then emits Rec.2100 HLG with Core Image `heif10Representation`; an automated test encodes and decodes an HDR HEIF on the simulator.
+- [PASS] Existing SDR import, LUT, RAW, crop, batch and JPEG export regressions remain green.
+
+Manual Verification Required:
+
+- On an EDR-capable iPhone, compare imported iPhone HDR HEIF/gain-map and HLG camera files with Photos, checking bright highlight detail in preview and Rec.2100 HLG HEIF output.
+- Inspect SDR tone-mapped exports on a conventional display; verify HDR HEIF Photos/Share/Files save behavior and GPS removal.
+- Measure memory and latency for 12MP/24MP/48MP real HDR sources.
+
+Known Limitations:
+
+- The repository has no redistributable real HDR/gain-map fixture, so visual HDR headroom and hardware display behavior cannot be automated here.
+- Core Image's `CIToneMapHeadroom` requires iOS 18. HDR → SDR conversion reports an explicit unsupported-system error below that OS rather than silently clipping; ordinary SDR behavior still supports the app's iOS 17 deployment target.
 
 ## Phase 7
 

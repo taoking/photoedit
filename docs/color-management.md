@@ -1,24 +1,24 @@
 # Color management and Technical LUTs
 
-## Phase 5 render contract
+## Render contract
 
-PhotoEdit uses one long-lived, Metal-backed `CIContext`. It declares a linear sRGB Core Image working space and an sRGB SDR output space. ImageIO preserves an embedded ICC profile when it can identify one; a standard JPEG, HEIF or PNG with no profile is explicitly loaded with an sRGB fallback. The source asset records the detected descriptor for inspection and render planning.
+PhotoEdit uses one long-lived, Metal-backed `CIContext`. It declares an Extended Linear sRGB, RGBA half-float Core Image working space; SDR output uses sRGB and HDR output uses Rec.2100 HLG 10-bit HEIF. ImageIO preserves an embedded ICC profile when it can identify one; a standard JPEG, HEIF or PNG with no profile is explicitly loaded with an sRGB fallback. The source asset records the detected descriptor for inspection and render planning.
 
 ```text
 Source Color Space
-→ linear sRGB Core Image Working Space
+→ Extended Linear sRGB Core Image Working Space
 → Technical LUT (optional, 100%)
 → global creative adjustments
 → Creative LUT (optional, 0…100%)
 → transform / crop
-→ sRGB SDR output
+→ HDR preview / Rec.2100 HLG HDR output, or tone-mapped sRGB SDR output
 ```
 
 `CIContext` performs its normal source-to-working and working-to-output color handling. The pipeline deliberately does not add `CIImage.matchedToWorkingSpace` nodes: Core Image returns a black frame for some generated or profile-less `CIImage` graphs when those nodes are injected. This keeps ordinary CIImage, ImageIO and RAW paths stable while retaining the context-level color-management boundary.
 
 ## Descriptors
 
-The persisted `ColorSpaceDescriptor` values are sRGB, Display P3, Linear sRGB, Rec.709, Extended Linear sRGB and Rec.709 HLG. Extended Linear and HLG are preserved as explicit descriptors rather than silently interpreted as sRGB. Their HDR rendering/export policy is introduced in Phase 6; Phase 5 still produces SDR sRGB output.
+The persisted `ColorSpaceDescriptor` values are sRGB, Display P3, Linear sRGB, Rec.709, Extended Linear sRGB, Rec.709 HLG and Rec.2100 HLG. Extended Linear and HLG are preserved as explicit descriptors rather than silently interpreted as sRGB. Phase 6 adds the HDR preview/export policy; SDR remains the default.
 
 ## LUT metadata and ordering
 
@@ -33,7 +33,7 @@ The metadata is stored with the catalog and validated before rendering. `CIColor
 
 ## Output and verification limits
 
-All Phase 5 exports remain JPEG or HEIF SDR sRGB, with the existing metadata/GPS policy. This phase does not claim to make an arbitrary S-Log, HLG or P3 cube visually correct without an accurate LUT declaration and a real source file.
+SDR exports remain JPEG or HEIF sRGB, with the existing metadata/GPS policy. Phase 6 additionally provides HDR HEIF only for a validated HDR source, with Rec.2100 HLG and 10-bit encoding. This app does not claim to make an arbitrary S-Log, HLG or P3 cube visually correct without an accurate LUT declaration and a real source file.
 
 Manual verification is required with the original camera/display assets:
 

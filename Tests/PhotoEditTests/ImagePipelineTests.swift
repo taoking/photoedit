@@ -101,7 +101,7 @@ final class ImagePipelineTests: XCTestCase {
 
     func testJPEGExportCreatesNewDecodableFile() async throws {
         let asset = ImageAsset(
-            id: UUID(), sourceName: "Test", fullResolutionImage: source, originalData: Data(), pixelWidth: 1024, pixelHeight: 640, metadata: [:], sourceType: .png, sourceColorSpace: .sRGB, rawSource: nil
+            id: UUID(), sourceName: "Test", fullResolutionImage: source, originalData: Data(), pixelWidth: 1024, pixelHeight: 640, metadata: [:], sourceType: .png, sourceColorSpace: .sRGB, sourceHeadroom: 1, rawSource: nil
         )
         let output = try await ImageExporter.export(asset: asset, state: .initial, lut: nil, settings: ExportSettings(format: .jpeg, maximumDimension: nil, jpegQuality: 0.9, keepLocation: false))
         defer { try? FileManager.default.removeItem(at: output.fileURL) }

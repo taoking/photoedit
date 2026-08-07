@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreImage
 import Foundation
+import ImageIO
 import Metal
 
 enum RenderMode: Sendable, Equatable {
@@ -35,22 +36,25 @@ struct Histogram: Equatable, Sendable {
 actor ImagePipeline {
     static let shared = ImagePipeline()
 
-    /// SDR 编辑使用线性 sRGB；Extended Linear 作为明确的 LUT 边界保留，HDR 渲染在 Phase 6 单独开启。
-    private let workingColorSpaceDescriptor = ColorSpaceDescriptor.linearSRGB
+    /// 扩展线性 sRGB 能保存 HDR headroom；SDR 渲染仅在最终输出时 tone map 到 sRGB。
+    private let workingColorSpaceDescriptor = ColorSpaceDescriptor.extendedLinearSRGB
     private let outputColorSpaceDescriptor = ColorSpaceDescriptor.sRGB
-    private let workingColorSpace = CGColorSpace(name: CGColorSpace.linearSRGB)!
+    private let workingColorSpace = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
+    private let outputColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     private let context: CIContext
 
     init() {
         if let device = MTLCreateSystemDefaultDevice() {
             context = CIContext(mtlDevice: device, options: [
-                .workingColorSpace: CGColorSpace(name: CGColorSpace.linearSRGB)!,
-                .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!
+                .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!,
+                .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                .workingFormat: CIFormat.RGBAh
             ])
         } else {
             context = CIContext(options: [
-                .workingColorSpace: CGColorSpace(name: CGColorSpace.linearSRGB)!,
-                .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!
+                .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!,
+                .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                .workingFormat: CIFormat.RGBAh
             ])
         }
     }
@@ -61,8 +65,87 @@ actor ImagePipeline {
         lut: LUT?,
         technicalLUT: LUT? = nil,
         sourceColorSpace: ColorSpaceDescriptor = .sRGB,
+        sourceHeadroom: Float = 1,
+        dynamicRange: RenderDynamicRange = .sdr,
         mode: RenderMode
     ) throws -> CGImage {
+        let image = try renderedImage(
+            source: source,
+            state: state,
+            lut: lut,
+            technicalLUT: technicalLUT,
+            sourceColorSpace: sourceColorSpace,
+            sourceHeadroom: sourceHeadroom,
+            dynamicRange: dynamicRange,
+            mode: mode
+        )
+        let extent = image.extent.integral
+        let format: CIFormat = dynamicRange == .hdr ? .RGBAh : .RGBA8
+        let colorSpace = dynamicRange == .hdr ? workingColorSpace : outputColorSpace
+        guard !extent.isEmpty,
+              let output = context.createCGImage(image, from: extent, format: format, colorSpace: colorSpace) else {
+            throw ImageEditorError.renderFailed
+        }
+        return output
+    }
+
+    func renderHDRHEIF(
+        asset: ImageAsset,
+        state: EditState,
+        lut: LUT?,
+        technicalLUT: LUT? = nil,
+        settings: ExportSettings
+    ) throws -> Data {
+        _ = try HDRRendering.makePlan(
+            sourceColorSpace: asset.sourceColorSpace,
+            sourceHeadroom: asset.sourceHeadroom,
+            target: .hdr,
+            format: settings.format
+        )
+        guard #available(iOS 15.0, *) else { throw HDRRenderingError.hdrEncodingUnavailable }
+        let rendered = try renderedImage(
+            source: try sourceImage(
+                for: asset,
+                mode: .export(maximumDimension: settings.maximumDimension),
+                rawQuality: nil,
+                state: state
+            ),
+            state: state,
+            lut: lut,
+            technicalLUT: technicalLUT,
+            sourceColorSpace: asset.sourceColorSpace ?? .sRGB,
+            sourceHeadroom: asset.sourceHeadroom,
+            dynamicRange: .hdr,
+            mode: .export(maximumDimension: settings.maximumDimension)
+        )
+        var metadata = asset.metadata
+        if !settings.keepLocation { metadata.removeValue(forKey: kCGImagePropertyGPSDictionary) }
+        let properties = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key as String, $0.value) })
+        let imageWithMetadata = rendered.settingProperties(properties)
+        let options: [CIImageRepresentationOption: Any] = [
+            kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: settings.jpegQuality.clamped(to: 0.8...1)
+        ]
+        do {
+            return try context.heif10Representation(
+                of: imageWithMetadata,
+                colorSpace: ColorSpaceDescriptor.rec2100HLG.cgColorSpace,
+                options: options
+            )
+        } catch {
+            throw HDRRenderingError.hdrEncodingUnavailable
+        }
+    }
+
+    private func renderedImage(
+        source: CIImage,
+        state: EditState,
+        lut: LUT?,
+        technicalLUT: LUT?,
+        sourceColorSpace: ColorSpaceDescriptor,
+        sourceHeadroom: Float,
+        dynamicRange: RenderDynamicRange,
+        mode: RenderMode
+    ) throws -> CIImage {
         try Task.checkCancellation()
         _ = try colorRenderPlan(source: sourceColorSpace, technicalLUT: technicalLUT, creativeLUT: lut)
         // CIContext 的工作/输出色彩空间负责系统级的图像色彩匹配。不要在图像图中
@@ -83,12 +166,11 @@ actor ImagePipeline {
         if case let .export(maximumDimension?) = mode {
             image = downsample(image, maximumDimension: maximumDimension)
         }
-        try Task.checkCancellation()
-        let extent = image.extent.integral
-        guard !extent.isEmpty, let output = context.createCGImage(image, from: extent, format: .RGBA8, colorSpace: workingColorSpace) else {
-            throw ImageEditorError.renderFailed
+        if dynamicRange == .sdr {
+            image = try HDRRendering.toneMapToSDR(image, sourceHeadroom: sourceHeadroom)
         }
-        return output
+        try Task.checkCancellation()
+        return image
     }
 
     func render(
@@ -96,33 +178,19 @@ actor ImagePipeline {
         state: EditState,
         lut: LUT?,
         technicalLUT: LUT? = nil,
+        dynamicRange: RenderDynamicRange = .sdr,
         mode: RenderMode,
         rawQuality: RAWRenderQuality? = nil
     ) throws -> CGImage {
-        let source: CIImage
-        if let raw = asset.rawSource {
-            let quality: RAWRenderQuality
-            if let rawQuality {
-                quality = rawQuality
-            } else {
-                switch mode {
-                case .preview:
-                    quality = .fastPreview
-                case .export:
-                    // Resize happens after the full RAW pipeline; an export is never a draft decode.
-                    quality = .fullResolution
-                }
-            }
-            source = try raw.decode(adjustments: state.raw ?? RAWAdjustments(), quality: quality)
-        } else {
-            source = asset.fullResolutionImage
-        }
+        let source = try sourceImage(for: asset, mode: mode, rawQuality: rawQuality, state: state)
         return try render(
             image: source,
             state: state,
             lut: lut,
             technicalLUT: technicalLUT,
             sourceColorSpace: asset.sourceColorSpace ?? .sRGB,
+            sourceHeadroom: asset.sourceHeadroom,
+            dynamicRange: dynamicRange,
             mode: mode
         )
     }
@@ -151,6 +219,28 @@ actor ImagePipeline {
             hasCreativeLUT: creativeLUT != nil,
             output: outputColorSpaceDescriptor
         )
+    }
+
+    private func sourceImage(
+        for asset: ImageAsset,
+        mode: RenderMode,
+        rawQuality: RAWRenderQuality?,
+        state: EditState
+    ) throws -> CIImage {
+        guard let raw = asset.rawSource else { return asset.fullResolutionImage }
+        let quality: RAWRenderQuality
+        if let rawQuality {
+            quality = rawQuality
+        } else {
+            switch mode {
+            case .preview:
+                quality = .fastPreview
+            case .export:
+                // Resize happens after the full RAW pipeline; an export is never a draft decode.
+                quality = .fullResolution
+            }
+        }
+        return try raw.decode(adjustments: state.raw ?? RAWAdjustments(), quality: quality)
     }
 
     /// 直方图只读取下采样 Preview Source；不参与 Slider 的全分辨率渲染路径。

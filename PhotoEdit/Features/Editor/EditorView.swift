@@ -1,5 +1,6 @@
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 private enum EditorTool: String, CaseIterable, Identifiable {
@@ -160,14 +161,12 @@ struct EditorView: View {
                     Color.black
                     if model.isShowingReference, let reference = model.referencePreviewImage {
                         HStack(spacing: 1) {
-                            Image(decorative: reference, scale: 1)
-                                .resizable()
-                                .scaledToFit()
+                            DynamicRangeImage(image: reference)
+                                .aspectRatio(CGFloat(reference.width) / CGFloat(reference.height), contentMode: .fit)
                                 .accessibilityLabel("参考照片")
                             if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                                Image(decorative: image, scale: 1)
-                                    .resizable()
-                                    .scaledToFit()
+                                DynamicRangeImage(image: image)
+                                    .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
                                     .scaleEffect(zoom)
                                     .offset(pan)
                                     .gesture(imageGesture(in: geometry.size))
@@ -175,9 +174,8 @@ struct EditorView: View {
                             }
                         }
                     } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                        Image(decorative: image, scale: 1)
-                            .resizable()
-                            .scaledToFit()
+                        DynamicRangeImage(image: image)
+                            .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
                             .scaleEffect(zoom)
                             .offset(pan)
                             .gesture(imageGesture(in: geometry.size))
@@ -189,6 +187,15 @@ struct EditorView: View {
                     }
                     if model.isRendering && model.previewImage != nil {
                         ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding()
+                    }
+                    if model.usesHDRPreview {
+                        Label("HDR 预览", systemImage: "sun.max.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                            .padding()
                     }
                 }
                 .clipShape(Rectangle())
@@ -322,6 +329,24 @@ struct EditorView: View {
         case let .success(url): model.importPreset(url: url)
         case let .failure(error): model.errorMessage = error.localizedDescription
         }
+    }
+}
+
+/// `UIImageView` 明确请求 high dynamic range；SDR 图片在该视图中保持原样。
+private struct DynamicRangeImage: UIViewRepresentable {
+    let image: CGImage
+
+    func makeUIView(context _: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.preferredImageDynamicRange = .high
+        return imageView
+    }
+
+    func updateUIView(_ imageView: UIImageView, context _: Context) {
+        imageView.image = UIImage(cgImage: image)
+        imageView.preferredImageDynamicRange = .high
     }
 }
 
@@ -1092,6 +1117,20 @@ private struct ExportOptionsView: View {
                     Picker("文件格式", selection: $settings.format) {
                         ForEach(ExportFormat.allCases) { Text($0.title).tag($0) }
                     }
+                    .disabled(settings.dynamicRange == .hdr)
+                    Picker("动态范围", selection: Binding(
+                        get: { settings.dynamicRange },
+                        set: { range in
+                            settings.dynamicRange = range
+                            if range == .hdr { settings.format = .heif }
+                        }
+                    )) {
+                        ForEach(ExportDynamicRange.allCases) { Text($0.title).tag($0) }
+                    }
+                    if settings.dynamicRange == .hdr {
+                        Text("HDR 仅适用于真实 HDR 源，并导出为 10-bit HEIF。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Picker("尺寸", selection: Binding(
                         get: { settings.maximumDimension ?? 0 },
                         set: { settings.maximumDimension = $0 == 0 ? nil : $0 }
@@ -1148,6 +1187,16 @@ private struct BatchExportOptionsView: View {
                 Section("格式与尺寸") {
                     Picker("文件格式", selection: $settings.format) {
                         ForEach(ExportFormat.allCases) { Text($0.title).tag($0) }
+                    }
+                    .disabled(settings.dynamicRange == .hdr)
+                    Picker("动态范围", selection: Binding(
+                        get: { settings.dynamicRange },
+                        set: { range in
+                            settings.dynamicRange = range
+                            if range == .hdr { settings.format = .heif }
+                        }
+                    )) {
+                        ForEach(ExportDynamicRange.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("最长边", selection: Binding(
                         get: { settings.maximumDimension ?? 0 },

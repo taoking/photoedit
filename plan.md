@@ -921,6 +921,6 @@ RAW + Batch
 - [x] Phase 3 — RAW 工作流
 - [x] Phase 4 — 批量工作流
 - [x] Phase 5 — 色彩管理与 Technical LUT
-- [ ] Phase 6 — HDR
+- [x] Phase 6 — HDR
 - [ ] Phase 7 — 局部调整
 - [ ] Phase 8 — 视频 LUT

@@ -21,7 +21,7 @@ final class ColorManagementTests: XCTestCase {
         let creative = TestLUTFactory.identityLUT()
         let plan = try await pipeline.colorRenderPlan(source: .displayP3, technicalLUT: technical, creativeLUT: creative)
         XCTAssertEqual(plan.source, .displayP3)
-        XCTAssertEqual(plan.working, .linearSRGB)
+        XCTAssertEqual(plan.working, .extendedLinearSRGB)
         XCTAssertTrue(plan.hasTechnicalTransform)
         XCTAssertTrue(plan.hasCreativeLUT)
         XCTAssertEqual(plan.output, .sRGB)
