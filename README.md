@@ -2,7 +2,7 @@
 
 PhotoEdit 是一个原生 SwiftUI iOS 照片编辑器，面向日常旅行摄影与 `.cube` LUT 工作流。应用使用 Core Image 与长生命周期 Metal-backed `CIContext`；编辑状态是可序列化、非破坏性的。
 
-当前已完成 Phase 1 至 Phase 3：包含基础调色、LUT、HSL、曲线、预设、以及基于 `CIRAWFilter` 的 DNG/ARW RAW 调整、相机元数据和全分辨率 RAW 导出。后续阶段状态以 [development-progress.md](docs/development-progress.md) 为准。
+当前已完成 Phase 1 至 Phase 4：包含基础调色、LUT、HSL、曲线、预设、基于 `CIRAWFilter` 的 DNG/ARW RAW 调整，以及受控顺序的批量处理、最近设置和参考照片对照。后续阶段状态以 [development-progress.md](docs/development-progress.md) 为准。
 
 ## Build and test
 

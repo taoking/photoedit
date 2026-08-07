@@ -103,7 +103,42 @@ Known Limitations:
 
 ## Phase 4
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 4 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 27 tests, 0 failures (includes all prior regression tests).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Phase 4 Acceptance:
+
+- [PASS] Files picker can select multiple JPEG/HEIF/PNG/DNG/ARW sources in one operation.
+- [PASS] A batch can explicitly use current adjustments, clipboard adjustments, a stored preset, or a selected LUT.
+- [PASS] `BatchExportQueue` processes jobs strictly one at a time; each iteration opens its own source URL, so selected photos are not all decoded/retained in memory.
+- [PASS] Progress, cancellation and completed/failed/cancelled item results are exposed in the editor; a unit test verifies one invalid source does not prevent a valid item from exporting.
+- [PASS] JPEG/HEIF, original/resize, JPEG quality and original/original-edited/sequential filename strategies are supported; completed files can be handed to the system share/save sheet together.
+- [PASS] Recent LUT, preset and export settings are persisted and deduplicated, with coverage for persistence.
+- [PASS] A reference file produces an independent preview that can be shown beside the current edit.
+
+Implemented:
+
+- URL-backed batch selection, sequential Core Image export queue and per-item outcome model.
+- Batch adjustment-source controls, progress/cancel UI, result summary and system sharing.
+- Export naming policies shared by single and batch export.
+- UserDefaults-backed Recent Settings store for LUT, preset and export settings.
+- Reference photo import and left/right comparison presentation.
+- RAW file-path detection fix and correct full-resolution RAW decode even for resized exports.
+
+Manual Verification Required:
+
+- On a physical device, select a real travel folder of JPEG/HEIF/DNG/ARW files and verify progress, cancellation latency, memory peak, errors, system share/save workflow and filename collision behavior.
+- Compare a reference photo and edit side-by-side for several source aspect ratios; evaluate legibility and accessibility under both light and dark appearances.
+
+Known Limitations:
+
+- The File importer—not PhotosPicker—is the multi-selection entry point, because raw camera files require Files access in this phase.
+- Batch output remains temporary until handed to the system share/save sheet; the app never overwrites source files.
 
 ## Phase 5
 

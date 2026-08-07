@@ -74,7 +74,18 @@ actor ImagePipeline {
     func render(asset: ImageAsset, state: EditState, lut: LUT?, mode: RenderMode, rawQuality: RAWRenderQuality? = nil) throws -> CGImage {
         let source: CIImage
         if let raw = asset.rawSource {
-            let quality = rawQuality ?? (mode.maximumDimension == nil ? .fullResolution : .fastPreview)
+            let quality: RAWRenderQuality
+            if let rawQuality {
+                quality = rawQuality
+            } else {
+                switch mode {
+                case .preview:
+                    quality = .fastPreview
+                case .export:
+                    // Resize happens after the full RAW pipeline; an export is never a draft decode.
+                    quality = .fullResolution
+                }
+            }
             source = try raw.decode(adjustments: state.raw ?? RAWAdjustments(), quality: quality)
         } else {
             source = asset.fullResolutionImage

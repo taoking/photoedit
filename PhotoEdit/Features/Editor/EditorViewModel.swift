@@ -14,16 +14,27 @@ final class EditorViewModel: ObservableObject {
     @Published private(set) var histogram = Histogram.empty
     @Published var exportedImage: ExportedImage?
     @Published var errorMessage: String?
+    @Published private(set) var batchPhotos: [BatchPhoto] = []
+    @Published private(set) var batchProgress = BatchProgress(completed: 0, total: 0, currentID: nil)
+    @Published private(set) var batchResults: [BatchItemResult] = []
+    @Published private(set) var isBatchExporting = false
+    @Published private(set) var batchState = EditState.initial
+    @Published private(set) var batchAdjustmentSource = "当前调整"
+    @Published private(set) var referencePreviewImage: CGImage?
+    @Published var isShowingReference = false
 
     let lutRepository: LUTRepository
     let presetRepository: PresetRepository
     let adjustmentClipboard: AdjustmentClipboard
     let lutPreviewCache = LUTPreviewCache()
+    let recentSettings: RecentSettingsStore
 
     private let pipeline: ImagePipeline
     private var renderTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
+    private var batchTask: Task<Void, Never>?
     private var histogramTask: Task<Void, Never>?
+    private var referenceTask: Task<Void, Never>?
     private var renderGeneration = 0
     private var undoStack: [EditState] = []
     private var pendingContinuousUndo: EditState?
@@ -32,21 +43,30 @@ final class EditorViewModel: ObservableObject {
         lutRepository: LUTRepository = LUTRepository(),
         presetRepository: PresetRepository = PresetRepository(),
         adjustmentClipboard: AdjustmentClipboard = AdjustmentClipboard(),
+        recentSettings: RecentSettingsStore = RecentSettingsStore(),
         pipeline: ImagePipeline = .shared
     ) {
         self.lutRepository = lutRepository
         self.presetRepository = presetRepository
         self.adjustmentClipboard = adjustmentClipboard
+        self.recentSettings = recentSettings
         self.pipeline = pipeline
     }
 
     deinit {
         renderTask?.cancel()
         exportTask?.cancel()
+        batchTask?.cancel()
         histogramTask?.cancel()
+        referenceTask?.cancel()
     }
 
     var canUndo: Bool { !undoStack.isEmpty }
+    var batchOutputURLs: [URL] {
+        batchResults.compactMap {
+            if case let .succeeded(_, output) = $0 { output.fileURL } else { nil }
+        }
+    }
 
     func loadImage(data: Data, sourceName: String) {
         cancelRender()
@@ -129,6 +149,7 @@ final class EditorViewModel: ObservableObject {
             state.lut.selectedLUTID = id
             if id == nil { state.lut.intensity = 1 }
         }
+        if let id { recentSettings.record(lut: id) }
     }
 
     func resetHSL(_ channel: HSLChannel) {
@@ -193,6 +214,7 @@ final class EditorViewModel: ObservableObject {
         guard applied != state else { return }
         undoStack.append(state)
         state = applied
+        recentSettings.record(preset: id)
         lutPreviewCache.clear()
         schedulePreviewRender()
     }
@@ -237,6 +259,7 @@ final class EditorViewModel: ObservableObject {
         exportTask?.cancel()
         isExporting = true
         errorMessage = nil
+        recentSettings.record(export: settings)
         let state = state
         let lut = selectedLUT()
         exportTask = Task { [weak self, pipeline, asset, state, lut] in
@@ -259,6 +282,110 @@ final class EditorViewModel: ObservableObject {
         exportedImage = nil
     }
 
+    /// 仅保存安全作用域文件 URL；真正的图像解码由顺序队列在导出到该项时执行。
+    func addBatchPhotos(urls: [URL]) {
+        if batchPhotos.isEmpty, !urls.isEmpty {
+            batchState = state
+            batchAdjustmentSource = "当前调整"
+        }
+        let existing = Set(batchPhotos.map { $0.url.standardizedFileURL.path })
+        let newPhotos = urls
+            .filter { !existing.contains($0.standardizedFileURL.path) }
+            .map(BatchPhoto.init(url:))
+        batchPhotos.append(contentsOf: newPhotos)
+    }
+
+    func removeBatchPhotos(at offsets: IndexSet) {
+        guard !isBatchExporting else { return }
+        batchPhotos.remove(atOffsets: offsets)
+    }
+
+    func clearBatchPhotos() {
+        guard !isBatchExporting else { return }
+        batchPhotos.removeAll()
+        batchResults.removeAll()
+        batchProgress = BatchProgress(completed: 0, total: 0, currentID: nil)
+    }
+
+    func applyCurrentAdjustmentsToBatch() {
+        batchState = state
+        batchAdjustmentSource = "当前照片调整"
+    }
+
+    func applyCopiedAdjustmentsToBatch() -> Bool {
+        guard let copied = adjustmentClipboard.paste(into: .initial) else { return false }
+        batchState = copied
+        batchAdjustmentSource = "已复制的调整"
+        return true
+    }
+
+    func applyPresetToBatch(id: UUID) {
+        guard let preset = presetRepository.preset(id: id) else { return }
+        batchState = preset.payload.applying(to: .initial)
+        batchAdjustmentSource = "预设：\(preset.name)"
+        recentSettings.record(preset: id)
+    }
+
+    func applyLUTToBatch(id: UUID?) {
+        batchState.lut.selectedLUTID = id
+        batchState.lut.intensity = 1
+        batchAdjustmentSource = id == nil ? "不使用 LUT" : "LUT：\(lutRepository.items.first(where: { $0.id == id })?.name ?? "已选")"
+        if let id { recentSettings.record(lut: id) }
+    }
+
+    func startBatchExport(settings: ExportSettings) {
+        guard !batchPhotos.isEmpty, !isBatchExporting else { return }
+        let lut = lut(for: batchState)
+        guard batchState.lut.selectedLUTID == nil || lut != nil else { return }
+        let jobs = batchPhotos.map {
+            BatchExportJob(id: $0.id, photo: $0, state: batchState, lut: lut, settings: settings)
+        }
+        batchTask?.cancel()
+        batchResults.removeAll()
+        batchProgress = BatchProgress(completed: 0, total: jobs.count, currentID: nil)
+        isBatchExporting = true
+        errorMessage = nil
+        recentSettings.record(export: settings)
+        let queue = BatchExportQueue()
+        batchTask = Task { [weak self] in
+            let results = await queue.run(jobs) { [weak self] progress in
+                await MainActor.run { self?.batchProgress = progress }
+            }
+            self?.batchResults = results
+            self?.isBatchExporting = false
+        }
+    }
+
+    func cancelBatchExport() {
+        batchTask?.cancel()
+        isBatchExporting = false
+    }
+
+    func loadReference(url: URL) {
+        referenceTask?.cancel()
+        errorMessage = nil
+        referenceTask = Task { [weak self, pipeline] in
+            do {
+                let reference = try await Task.detached(priority: .userInitiated) {
+                    try ImageLoader.load(url: url)
+                }.value
+                let preview = try await pipeline.render(
+                    asset: reference,
+                    state: .initial,
+                    lut: nil,
+                    mode: .preview(maximumDimension: 1600)
+                )
+                guard !Task.isCancelled else { return }
+                self?.referencePreviewImage = preview
+                self?.isShowingReference = true
+            } catch is CancellationError {
+                // A newer reference selection replaced this work.
+            } catch {
+                self?.present(error)
+            }
+        }
+    }
+
     private func install(asset: ImageAsset) {
         self.asset = asset
         state = .initial
@@ -277,7 +404,11 @@ final class EditorViewModel: ObservableObject {
     }
 
     private func selectedLUT() -> LUT? {
-        guard let id = state.lut.selectedLUTID else { return nil }
+        lut(for: state)
+    }
+
+    private func lut(for renderState: EditState) -> LUT? {
+        guard let id = renderState.lut.selectedLUTID else { return nil }
         do { return try lutRepository.lut(for: id) }
         catch {
             present(error)

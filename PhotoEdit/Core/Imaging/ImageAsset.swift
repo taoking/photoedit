@@ -66,6 +66,6 @@ enum ImageLoader {
             if accessGranted { url.stopAccessingSecurityScopedResource() }
         }
         let data = try Data(contentsOf: url)
-        return try load(data: data, sourceName: url.deletingPathExtension().lastPathComponent)
+        return try load(data: data, sourceName: url.lastPathComponent)
     }
 }

@@ -919,7 +919,7 @@ RAW + Batch
 - [x] Phase 1 — 基础调色、LUT、Crop、全分辨率导出
 - [x] Phase 2 — HSL / Curve / Histogram / Preset / Copy-Paste
 - [x] Phase 3 — RAW 工作流
-- [ ] Phase 4 — 批量工作流
+- [x] Phase 4 — 批量工作流
 - [ ] Phase 5 — 色彩管理与 Technical LUT
 - [ ] Phase 6 — HDR
 - [ ] Phase 7 — 局部调整

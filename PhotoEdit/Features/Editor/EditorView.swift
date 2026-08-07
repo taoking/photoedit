@@ -8,6 +8,7 @@ private enum EditorTool: String, CaseIterable, Identifiable {
     case curves = "曲线"
     case presets = "预设"
     case raw = "RAW"
+    case batch = "批量"
     case lut = "LUT"
     case crop = "裁切"
 
@@ -29,6 +30,9 @@ struct EditorView: View {
     @State private var presetDocument = PresetDocument()
     @State private var presetFilename = "Preset.json"
     @State private var showingSelectivePaste = false
+    @State private var showingBatchImporter = false
+    @State private var showingReferenceImporter = false
+    @State private var showingBatchExportOptions = false
     @State private var tool: EditorTool = .adjust
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
@@ -61,21 +65,27 @@ struct EditorView: View {
         }
         .fileImporter(
             isPresented: $showingImageImporter,
-            allowedContentTypes: [.jpeg, .heic, .heif, .png, UTType(filenameExtension: "dng") ?? .data, UTType(filenameExtension: "arw") ?? .data]
-        ) { result in
-            if case let .success(url) = result { model.loadImage(url: url) }
-            else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
-        }
-        .fileImporter(isPresented: $showingLUTImporter, allowedContentTypes: [UTType(filenameExtension: "cube") ?? .data]) { result in
-            if case let .success(url) = result { model.importLUT(url: url) }
-            else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
-        }
-        .fileImporter(isPresented: $showingPresetImporter, allowedContentTypes: [.json]) { result in
-            if case let .success(url) = result { model.importPreset(url: url) }
-            else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
-        }
+            allowedContentTypes: supportedImageTypes,
+            onCompletion: handleImageImport
+        )
+        .fileImporter(
+            isPresented: $showingBatchImporter,
+            allowedContentTypes: supportedImageTypes,
+            allowsMultipleSelection: true,
+            onCompletion: handleBatchImport
+        )
+        .fileImporter(
+            isPresented: $showingReferenceImporter,
+            allowedContentTypes: supportedImageTypes,
+            onCompletion: handleReferenceImport
+        )
+        .fileImporter(isPresented: $showingLUTImporter, allowedContentTypes: [UTType(filenameExtension: "cube") ?? .data], onCompletion: handleLUTImport)
+        .fileImporter(isPresented: $showingPresetImporter, allowedContentTypes: [.json], onCompletion: handlePresetImport)
         .sheet(isPresented: $showingExportOptions) {
             ExportOptionsView(model: model)
+        }
+        .sheet(isPresented: $showingBatchExportOptions) {
+            BatchExportOptionsView(model: model)
         }
         .sheet(isPresented: Binding(
             get: { model.exportedImage != nil },
@@ -148,7 +158,23 @@ struct EditorView: View {
             GeometryReader { geometry in
                 ZStack {
                     Color.black
-                    if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
+                    if model.isShowingReference, let reference = model.referencePreviewImage {
+                        HStack(spacing: 1) {
+                            Image(decorative: reference, scale: 1)
+                                .resizable()
+                                .scaledToFit()
+                                .accessibilityLabel("参考照片")
+                            if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
+                                Image(decorative: image, scale: 1)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .scaleEffect(zoom)
+                                    .offset(pan)
+                                    .gesture(imageGesture(in: geometry.size))
+                                    .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
+                            }
+                        }
+                    } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
                         Image(decorative: image, scale: 1)
                             .resizable()
                             .scaledToFit()
@@ -193,6 +219,13 @@ struct EditorView: View {
                         }
                     )
                 case .raw: RAWPanel(model: model)
+                case .batch:
+                    BatchPanel(
+                        model: model,
+                        showingImporter: $showingBatchImporter,
+                        showingReferenceImporter: $showingReferenceImporter,
+                        showingExportOptions: $showingBatchExportOptions
+                    )
                 case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
                 case .crop: CropPanel(model: model)
                 }
@@ -250,6 +283,45 @@ struct EditorView: View {
             DragGesture()
                 .onChanged { value in pan = value.translation }
         )
+    }
+
+    private var supportedImageTypes: [UTType] {
+        [.jpeg, .heic, .heif, .png, UTType(filenameExtension: "dng") ?? .data, UTType(filenameExtension: "arw") ?? .data]
+    }
+
+    private func handleImageImport(_ result: Result<URL, Error>) {
+        switch result {
+        case let .success(url): model.loadImage(url: url)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleBatchImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case let .success(urls): model.addBatchPhotos(urls: urls)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleReferenceImport(_ result: Result<URL, Error>) {
+        switch result {
+        case let .success(url): model.loadReference(url: url)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleLUTImport(_ result: Result<URL, Error>) {
+        switch result {
+        case let .success(url): model.importLUT(url: url)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handlePresetImport(_ result: Result<URL, Error>) {
+        switch result {
+        case let .success(url): model.importPreset(url: url)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -775,6 +847,119 @@ private struct LUTCard: View {
     }
 }
 
+private struct BatchPanel: View {
+    @ObservedObject var model: EditorViewModel
+    @Binding var showingImporter: Bool
+    @Binding var showingReferenceImporter: Bool
+    @Binding var showingExportOptions: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Button("选择多张照片", systemImage: "photo.stack") { showingImporter = true }
+                    Spacer()
+                    Text("\(model.batchPhotos.count) 张")
+                        .foregroundStyle(.secondary)
+                    if !model.batchPhotos.isEmpty {
+                        Button("清空", role: .destructive) { model.clearBatchPhotos() }
+                            .disabled(model.isBatchExporting)
+                    }
+                }
+
+                GroupBox("批量调整：\(model.batchAdjustmentSource)") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Button("使用当前调整") { model.applyCurrentAdjustmentsToBatch() }
+                            Button("使用已复制调整") {
+                                if !model.applyCopiedAdjustmentsToBatch() {
+                                    model.errorMessage = "请先在编辑器中复制调整。"
+                                }
+                            }
+                            .disabled(!model.adjustmentClipboard.hasAdjustments)
+                        }
+                        Menu("套用预设") {
+                            ForEach(model.presetRepository.presets) { preset in
+                                Button(preset.name) { model.applyPresetToBatch(id: preset.id) }
+                            }
+                        }
+                        .disabled(model.presetRepository.presets.isEmpty)
+                        Menu("套用 LUT") {
+                            Button("不使用 LUT") { model.applyLUTToBatch(id: nil) }
+                            ForEach(model.lutRepository.items) { item in
+                                Button(item.name) { model.applyLUTToBatch(id: item.id) }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if !model.recentSettings.lutIDs.isEmpty || !model.recentSettings.presetIDs.isEmpty {
+                    Menu("最近使用") {
+                        ForEach(model.recentSettings.presetIDs, id: \.self) { id in
+                            if let preset = model.presetRepository.preset(id: id) {
+                                Button("预设：\(preset.name)") { model.applyPresetToBatch(id: id) }
+                            }
+                        }
+                        ForEach(model.recentSettings.lutIDs, id: \.self) { id in
+                            if let lut = model.lutRepository.items.first(where: { $0.id == id }) {
+                                Button("LUT：\(lut.name)") { model.applyLUTToBatch(id: id) }
+                            }
+                        }
+                    }
+                }
+
+                GroupBox("参考照片") {
+                    HStack {
+                        Button("载入参考照片", systemImage: "rectangle.split.2x1") { showingReferenceImporter = true }
+                        Toggle("左右对照", isOn: $model.isShowingReference)
+                            .disabled(model.referencePreviewImage == nil)
+                    }
+                }
+
+                if model.isBatchExporting {
+                    ProgressView(value: Double(model.batchProgress.completed), total: Double(max(1, model.batchProgress.total))) {
+                        Text("正在导出 \(model.batchProgress.completed) / \(model.batchProgress.total)")
+                    }
+                    Button("取消批量导出", role: .destructive) { model.cancelBatchExport() }
+                } else {
+                    Button("开始批量导出", systemImage: "square.and.arrow.up") { showingExportOptions = true }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.batchPhotos.isEmpty)
+                }
+
+                if !model.batchPhotos.isEmpty {
+                    ForEach(model.batchPhotos) { photo in
+                        Text(photo.sourceName).font(.caption).lineLimit(1)
+                    }
+                }
+                if !model.batchResults.isEmpty {
+                    Text("结果").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(Array(model.batchResults.enumerated()), id: \.offset) { _, result in
+                        Text(result.title).font(.caption)
+                    }
+                    if !model.batchOutputURLs.isEmpty {
+                        ShareLink(items: model.batchOutputURLs) {
+                            Label("分享或存储已导出的文件", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+private extension BatchItemResult {
+    var title: String {
+        switch self {
+        case let .succeeded(_, output): "已完成：\(output.filename)"
+        case let .failed(_, message): "失败：\(message)"
+        case .cancelled: "已取消"
+        }
+    }
+}
+
 private struct CropPanel: View {
     @ObservedObject var model: EditorViewModel
 
@@ -866,6 +1051,14 @@ private struct ExportOptionsView: View {
                         .pickerStyle(.segmented)
                     }
                 }
+                Section("文件名") {
+                    Picker("命名方式", selection: $settings.filenameStrategy) {
+                        ForEach(ExportFilenameStrategy.allCases) { Text($0.title).tag($0) }
+                    }
+                    if settings.filenameStrategy == .sequential {
+                        TextField("编号前缀", text: $settings.filenamePrefix)
+                    }
+                }
                 Section("隐私") { Toggle("保留位置", isOn: $settings.keepLocation) }
                 if model.isExporting { ProgressView("正在按原始管线导出") }
             }
@@ -878,6 +1071,63 @@ private struct ExportOptionsView: View {
                         dismiss()
                     }
                     .disabled(model.isExporting)
+                }
+            }
+        }
+    }
+}
+
+private struct BatchExportOptionsView: View {
+    @ObservedObject var model: EditorViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var settings = ExportSettings()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("格式与尺寸") {
+                    Picker("文件格式", selection: $settings.format) {
+                        ForEach(ExportFormat.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("最长边", selection: Binding(
+                        get: { settings.maximumDimension ?? 0 },
+                        set: { settings.maximumDimension = $0 == 0 ? nil : $0 }
+                    )) {
+                        Text("原始分辨率").tag(0)
+                        Text("4096 px").tag(4096)
+                        Text("2048 px").tag(2048)
+                    }
+                    if settings.format == .jpeg {
+                        Picker("JPEG 质量", selection: $settings.jpegQuality) {
+                            Text("80%").tag(0.8)
+                            Text("90%").tag(0.9)
+                            Text("100%").tag(1.0)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+                Section("文件名") {
+                    Picker("命名方式", selection: $settings.filenameStrategy) {
+                        ForEach(ExportFilenameStrategy.allCases) { Text($0.title).tag($0) }
+                    }
+                    if settings.filenameStrategy == .sequential {
+                        TextField("编号前缀", text: $settings.filenamePrefix)
+                    }
+                }
+                Section("隐私") { Toggle("保留位置", isOn: $settings.keepLocation) }
+                if let recent = model.recentSettings.exportSettings.first {
+                    Button("使用最近导出设置") { settings = recent }
+                }
+            }
+            .navigationTitle("批量导出")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("开始") {
+                        model.startBatchExport(settings: settings)
+                        dismiss()
+                    }
+                    .disabled(model.batchPhotos.isEmpty || model.isBatchExporting)
                 }
             }
         }

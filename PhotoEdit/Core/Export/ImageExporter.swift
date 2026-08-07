@@ -15,15 +15,52 @@ enum ExportFormat: String, Codable, CaseIterable, Identifiable, Sendable {
     var fileExtension: String { self == .jpeg ? "jpg" : "heic" }
 }
 
+enum ExportFilenameStrategy: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// 保留原始基础名称，并加上 -edited 标记。
+    case originalEdited
+    /// 保留原始基础名称，适合已在独立导出目录中管理的照片。
+    case original
+    /// 以可配置前缀和连续序号命名，避免同名来源互相混淆。
+    case sequential
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .originalEdited: "原名 - edited"
+        case .original: "仅原名"
+        case .sequential: "连续编号"
+        }
+    }
+}
+
 struct ExportSettings: Codable, Equatable, Sendable {
     var format: ExportFormat = .jpeg
     /// nil 表示原始分辨率。
     var maximumDimension: Int?
     var jpegQuality: Double = 0.9
     var keepLocation: Bool = true
+    var filenameStrategy: ExportFilenameStrategy = .originalEdited
+    var filenamePrefix = "PhotoEdit"
+
+    func filename(for sourceName: String, sequenceNumber: Int? = nil) -> String {
+        let baseName = ImageExporter.sanitizedFilename(URL(fileURLWithPath: sourceName).deletingPathExtension().lastPathComponent)
+        let stem: String
+        switch filenameStrategy {
+        case .originalEdited:
+            stem = baseName + "-edited"
+        case .original:
+            stem = baseName
+        case .sequential:
+            let prefix = ImageExporter.sanitizedFilename(filenamePrefix.trimmingCharacters(in: .whitespacesAndNewlines))
+            let ordinal = sequenceNumber ?? 1
+            stem = "\(prefix)-\(String(format: "%03d", ordinal))"
+        }
+        return stem + ".\(format.fileExtension)"
+    }
 }
 
-struct ExportedImage {
+struct ExportedImage: @unchecked Sendable {
     let data: Data
     let fileURL: URL
     let type: UTType
@@ -36,6 +73,7 @@ enum ImageExporter {
         state: EditState,
         lut: LUT?,
         settings: ExportSettings,
+        sequenceNumber: Int? = nil,
         pipeline: ImagePipeline = .shared
     ) async throws -> ExportedImage {
         let image = try await pipeline.render(
@@ -47,7 +85,7 @@ enum ImageExporter {
         try Task.checkCancellation()
 
         let data = try encode(image: image, asset: asset, settings: settings)
-        let filename = sanitizedFilename(asset.sourceName) + "-edited.\(settings.format.fileExtension)"
+        let filename = settings.filename(for: asset.sourceName, sequenceNumber: sequenceNumber)
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(settings.format.fileExtension)
@@ -70,7 +108,7 @@ enum ImageExporter {
         return data as Data
     }
 
-    private static func sanitizedFilename(_ name: String) -> String {
+    static func sanitizedFilename(_ name: String) -> String {
         let invalid = CharacterSet(charactersIn: "/:\\")
         let result = name.components(separatedBy: invalid).joined(separator: "-")
         return result.isEmpty ? "Photo" : result
