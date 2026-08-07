@@ -26,12 +26,15 @@
 		5B70E4AD361BD7442C5B0420 /* AdjustmentClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDFB7C02B46526D3CA01BC8 /* AdjustmentClipboardTests.swift */; };
 		5B9CA355E6B1EB9606D57C25 /* LocalAdjustmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D89CE739E1203B7E56B82DDE /* LocalAdjustmentTests.swift */; };
 		611C6908DE55FF45841EA307 /* LUTRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7B318A4231766827C26CB2 /* LUTRepository.swift */; };
+		692FD988104D6EA99E4CCB45 /* VideoEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */; };
 		6C920B2BA6F209DD0993E7CF /* ImageAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF61BBC4CB543268C98A760C /* ImageAsset.swift */; };
 		6E44030B34AEA6B5F1A2BAEF /* CUBEParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0331CA37E856171BB2D3F821 /* CUBEParserTests.swift */; };
 		89A0C66FE772C974F8974736 /* HSLProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D299608943594CCCBA636A /* HSLProcessor.swift */; };
+		912861023625EB1F952D98BA /* VideoEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08B42002C7552E42DA34566 /* VideoEditingTests.swift */; };
 		94BEFB05A72C76CCBAD1B6DA /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8706CA9D5A39A92A7EDAD53F /* EditorView.swift */; };
 		A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5764FA663230295540E60D4B /* LUTRepositoryTests.swift */; };
 		B494F13F2841F13EDF21CD31 /* LUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */; };
+		B4F9AC4370A419692834A614 /* VideoEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A080219CCFAE906C4BF449A /* VideoEditing.swift */; };
 		C9A88F47EEC1ECFC2D78A54C /* LocalAdjustmentProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510B2CCC1CE0FDA3A8C6D436 /* LocalAdjustmentProcessor.swift */; };
 		CE37DFEC0040B890125E940F /* LUTProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE15D5900BBF77A86C1919B /* LUTProcessor.swift */; };
 		CFE097000B25BE070797F881 /* PhotoEditApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FA3ACA8E090F59EF6AA225 /* PhotoEditApp.swift */; };
@@ -75,10 +78,13 @@
 		602D6A07AAD8A96DF89F05A6 /* EditStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditStateTests.swift; sourceTree = "<group>"; };
 		6420A4B3586945F3BA83F4FD /* PhotoEditTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PhotoEditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		782C7F54CD612543B62468AE /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel.swift; sourceTree = "<group>"; };
+		7A080219CCFAE906C4BF449A /* VideoEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditing.swift; sourceTree = "<group>"; };
 		7E3C25C16E7ACD7DACBC0447 /* BatchExportQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchExportQueue.swift; sourceTree = "<group>"; };
 		7E7B318A4231766827C26CB2 /* LUTRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTRepository.swift; sourceTree = "<group>"; };
 		8706CA9D5A39A92A7EDAD53F /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8BEF67F7A9096F9B1E36C625 /* ToneCurveProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveProcessor.swift; sourceTree = "<group>"; };
+		8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditorView.swift; sourceTree = "<group>"; };
+		A08B42002C7552E42DA34566 /* VideoEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditingTests.swift; sourceTree = "<group>"; };
 		A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUT.swift; sourceTree = "<group>"; };
 		C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagementTests.swift; sourceTree = "<group>"; };
 		C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAWImageSource.swift; sourceTree = "<group>"; };
@@ -118,9 +124,18 @@
 				154471C40FC2F383F7A1BD3D /* PresetRepositoryTests.swift */,
 				4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */,
 				165FC84A048BA7AC0120792A /* TestLUTFactory.swift */,
+				A08B42002C7552E42DA34566 /* VideoEditingTests.swift */,
 			);
 			name = PhotoEditTests;
 			path = Tests/PhotoEditTests;
+			sourceTree = "<group>";
+		};
+		2E7F915931FBA1B63DC3B163 /* Video */ = {
+			isa = PBXGroup;
+			children = (
+				7A080219CCFAE906C4BF449A /* VideoEditing.swift */,
+			);
+			path = Video;
 			sourceTree = "<group>";
 		};
 		3DE9CB804C052FEF4CF580FF /* LUT */ = {
@@ -188,6 +203,7 @@
 				98CB5A70244F9CD6AE796311 /* Export */,
 				72CD5C755EFAF58A818A5311 /* Imaging */,
 				3DE9CB804C052FEF4CF580FF /* LUT */,
+				2E7F915931FBA1B63DC3B163 /* Video */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -199,6 +215,14 @@
 				E4C1A9981C3314F85DB9D060 /* ImageExporter.swift */,
 			);
 			path = Export;
+			sourceTree = "<group>";
+		};
+		D7D9D1AD10758CDE7B1C0EBA /* Video */ = {
+			isa = PBXGroup;
+			children = (
+				8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */,
+			);
+			path = Video;
 			sourceTree = "<group>";
 		};
 		D8201FAEA6D2DAF0BAD74879 /* Resources */ = {
@@ -213,6 +237,7 @@
 			isa = PBXGroup;
 			children = (
 				F26AAE0A517CE05537B1CBD8 /* Editor */,
+				D7D9D1AD10758CDE7B1C0EBA /* Video */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -327,6 +352,7 @@
 				4496C0D55DC6BE48BB771EC9 /* PresetRepositoryTests.swift in Sources */,
 				01DF6202A2B3C9F65C7DA891 /* RAWStateTests.swift in Sources */,
 				E771E7D2BC1B65713A2F0510 /* TestLUTFactory.swift in Sources */,
+				912861023625EB1F952D98BA /* VideoEditingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,6 +382,8 @@
 				2EB4E7AA9FCFF664191C1DED /* PresetRepository.swift in Sources */,
 				08E312F792F11E95A2D0BA8B /* RAWImageSource.swift in Sources */,
 				52B763F2F9C7EB9EFA040EF3 /* ToneCurveProcessor.swift in Sources */,
+				B4F9AC4370A419692834A614 /* VideoEditing.swift in Sources */,
+				692FD988104D6EA99E4CCB45 /* VideoEditorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

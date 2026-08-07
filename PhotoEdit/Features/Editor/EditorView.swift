@@ -21,6 +21,8 @@ struct EditorView: View {
     @StateObject private var model = EditorViewModel()
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingImageImporter = false
+    @State private var showingVideoImporter = false
+    @State private var selectedVideoURL: URL?
     @State private var showingLUTImporter = false
     @State private var showingPresetImporter = false
     @State private var showingExportOptions = false
@@ -69,6 +71,11 @@ struct EditorView: View {
             isPresented: $showingImageImporter,
             allowedContentTypes: supportedImageTypes,
             onCompletion: handleImageImport
+        )
+        .fileImporter(
+            isPresented: $showingVideoImporter,
+            allowedContentTypes: [.movie],
+            onCompletion: handleVideoImport
         )
         .fileImporter(
             isPresented: $showingBatchImporter,
@@ -129,6 +136,14 @@ struct EditorView: View {
         } message: {
             Text(model.errorMessage ?? "未知错误")
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { selectedVideoURL != nil },
+            set: { if !$0 { selectedVideoURL = nil } }
+        )) {
+            if let selectedVideoURL {
+                VideoEditorView(sourceURL: selectedVideoURL)
+            }
+        }
     }
 
     private var importLanding: some View {
@@ -147,6 +162,13 @@ struct EditorView: View {
                     showingImageImporter = true
                 } label: {
                     Label("从文件导入", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    showingVideoImporter = true
+                } label: {
+                    Label("导入视频并套用 LUT", systemImage: "video")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -267,6 +289,11 @@ struct EditorView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
+                Button {
+                    showingVideoImporter = true
+                } label: {
+                    Image(systemName: "video.badge.plus")
+                }
                 Menu {
                     Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
                     Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
@@ -301,6 +328,13 @@ struct EditorView: View {
     private func handleImageImport(_ result: Result<URL, Error>) {
         switch result {
         case let .success(url): model.loadImage(url: url)
+        case let .failure(error): model.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleVideoImport(_ result: Result<URL, Error>) {
+        switch result {
+        case let .success(url): selectedVideoURL = url
         case let .failure(error): model.errorMessage = error.localizedDescription
         }
     }

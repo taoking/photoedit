@@ -227,4 +227,28 @@ Known Limitations:
 
 ## Phase 8
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 8 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 44 tests, 0 failures (includes a generated H.264 video export/decode regression and all Phase 1–7 tests).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Phase 8 Acceptance:
+
+- [PASS] Files import opens an independent full-screen video editor; it copies the selected source to temporary storage before reading the video track, duration, dimensions and orientation transform.
+- [PASS] AVPlayer preview uses an `AVVideoComposition`; exposure, contrast, saturation, Creative LUT selection and LUT intensity all go through the same `VideoFrameProcessor` as export.
+- [PASS] The per-frame Core Image processor uses a Metal-backed context and preserves the source preferred transform. Video export uses `AVAssetExportSession` at highest quality, preferring MP4 and falling back to MOV, without altering the original source.
+- [PASS] Only Creative LUTs declared sRGB → sRGB are accepted by this SDR video workflow. HLG/PQ-marked HDR videos, Technical LUTs and ambiguous LUT metadata are rejected rather than silently treated as SDR/sRGB.
+- [PASS] An automated test writes a small H.264 MOV, imports, filters, exports and decodes it to a non-empty video track; state serialization and basic filter/orientation tests also pass.
+
+Manual Verification Required:
+
+- On an iPhone, import horizontal and vertical SDR H.264/HEVC videos with audio, including long/4K/high-frame-rate material. Compare player preview with exported MP4/MOV for direction, LUT strength, continuous playback and audio/video sync.
+- Measure preview rebuild latency and export memory/time with actual travel footage; use the system Share sheet to verify save/send compatibility.
+
+Known Limitations:
+
+- HDR HLG/PQ, Dolby Vision, gain maps and per-frame HDR metadata have no Phase 8 export policy and are explicitly outside this SDR video workflow. Unmarked HDR sources cannot be inferred reliably from an extension alone and still require human source inspection.
+- No trim, transition, multi-track, local masks, HSL/curves, RAW or technical log-to-display video conversion is implemented. The scope is basic SDR correction plus a declared Creative LUT.

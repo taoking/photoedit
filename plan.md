@@ -923,4 +923,4 @@ RAW + Batch
 - [x] Phase 5 — 色彩管理与 Technical LUT
 - [x] Phase 6 — HDR
 - [x] Phase 7 — 局部调整
-- [ ] Phase 8 — 视频 LUT
+- [x] Phase 8 — 视频 LUT

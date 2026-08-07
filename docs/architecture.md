@@ -24,4 +24,4 @@ LUT 元数据与原始 `.cube` 文件分开保存：导入文件复制至 `Appli
 
 预设采用 Codable JSON，保存 light/color/HSL/curve/detail/effects/LUT 与强度；除非创建时明确选择，否则不会写入 transform。`PresetRepository` 将库持久化到 `Application Support/PhotoEdit/Presets.json`，而 `AdjustmentClipboard` 保持应用内全部或分组选择性粘贴所需的值状态。
 
-Phase 7 的 `LocalAdjustment` 是 `EditState` 的值类型子模型，每项持有一个线性、径向或画笔蒙版及独立参数；`LocalAdjustmentProcessor` 在图像层执行合成，View 只编辑模型。视频不会复用静态 `ImagePipeline`，而是在 Phase 8 使用独立 AVFoundation composition。
+Phase 7 的 `LocalAdjustment` 是 `EditState` 的值类型子模型，每项持有一个线性、径向或画笔蒙版及独立参数；`LocalAdjustmentProcessor` 在图像层执行合成，View 只编辑模型。Phase 8 的 `VideoEditState`、`VideoFrameProcessor` 与 `VideoExporter` 也独立于静态 `ImagePipeline`：前者由 `AVVideoComposition` 按帧调用 Core Image，后者交给 `AVAssetExportSession` 重新编码。两条路径只共享 LUT 值模型和色彩元数据约束。
