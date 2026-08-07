@@ -9,11 +9,34 @@ struct EditState: Codable, Equatable, Sendable {
     var detail = DetailAdjustments()
     var effects = EffectAdjustments()
     var lut = LUTAdjustment()
+    /// 局部区域持有独立 mask 和参数，渲染时在全局调整之后混合。
+    var localAdjustments: [LocalAdjustment] = []
     var transform = TransformAdjustment()
     /// 仅 RAW 资产存在；标准 JPEG/HEIF/PNG 保持 nil，避免混入通用调色层。
     var raw: RAWAdjustments?
 
     static let initial = EditState()
+
+    private enum CodingKeys: String, CodingKey {
+        case light, color, hsl, curves, detail, effects, lut, localAdjustments, transform, raw
+    }
+
+    init() {}
+
+    /// 编辑预设会跨版本保留。新字段必须在这里提供默认值，才能继续打开旧版本保存的 JSON。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        light = try container.decodeIfPresent(LightAdjustments.self, forKey: .light) ?? .init()
+        color = try container.decodeIfPresent(ColorAdjustments.self, forKey: .color) ?? .init()
+        hsl = try container.decodeIfPresent(HSLAdjustments.self, forKey: .hsl) ?? .init()
+        curves = try container.decodeIfPresent(ToneCurveAdjustments.self, forKey: .curves) ?? .init()
+        detail = try container.decodeIfPresent(DetailAdjustments.self, forKey: .detail) ?? .init()
+        effects = try container.decodeIfPresent(EffectAdjustments.self, forKey: .effects) ?? .init()
+        lut = try container.decodeIfPresent(LUTAdjustment.self, forKey: .lut) ?? .init()
+        localAdjustments = try container.decodeIfPresent([LocalAdjustment].self, forKey: .localAdjustments) ?? []
+        transform = try container.decodeIfPresent(TransformAdjustment.self, forKey: .transform) ?? .init()
+        raw = try container.decodeIfPresent(RAWAdjustments.self, forKey: .raw)
+    }
 
     mutating func reset() {
         self = .initial

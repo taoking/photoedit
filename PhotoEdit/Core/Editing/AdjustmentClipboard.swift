@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 enum AdjustmentGroup: String, CaseIterable, Identifiable, Sendable {
-    case light, color, hsl, curve, lut, detail, effects, crop
+    case light, color, hsl, curve, lut, local, detail, effects, crop
 
     var id: String { rawValue }
     var title: String {
@@ -12,6 +12,7 @@ enum AdjustmentGroup: String, CaseIterable, Identifiable, Sendable {
         case .hsl: "HSL"
         case .curve: "曲线"
         case .lut: "LUT"
+        case .local: "局部调整"
         case .detail: "细节"
         case .effects: "效果"
         case .crop: "裁切与变换"
@@ -36,6 +37,7 @@ final class AdjustmentClipboard: ObservableObject {
         if groups.contains(.hsl) { output.hsl = source.hsl }
         if groups.contains(.curve) { output.curves = source.curves }
         if groups.contains(.lut) { output.lut = source.lut }
+        if groups.contains(.local) { output.localAdjustments = source.localAdjustments }
         if groups.contains(.detail) { output.detail = source.detail }
         if groups.contains(.effects) { output.effects = source.effects }
         if groups.contains(.crop) { output.transform = source.transform }

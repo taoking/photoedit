@@ -199,7 +199,31 @@ Known Limitations:
 
 ## Phase 7
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 7 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 40 tests, 0 failures (includes all Phase 1–6 regressions).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Phase 7 Acceptance:
+
+- [PASS] `EditState` stores an ordered list of independent local adjustments, each with its own enabled flag, mask and exposure/contrast/saturation values; an old JSON state without the new field decodes safely to an empty list.
+- [PASS] Linear gradient, radial gradient and sampled brush masks are rendered by Core Image and blend only the adjusted result through the mask; automated pixel checks prove all three alter the output.
+- [PASS] Local adjustments are applied after global adjustments and before Creative LUT/transform, so Preview and full-resolution export use the same order.
+- [PASS] Local adjustments participate in undo, Codable persistence and selective copy/paste. Brush sampling is distance-limited and capped at 512 points per stroke.
+- [PASS] All existing photo, RAW, batch, color-management and HDR tests remain green.
+
+Manual Verification Required:
+
+- Verify touch ergonomics, crop alignment, overlapping-mask order and Preview/export consistency on JPEG, HEIF and actual RAW files on an iPhone.
+- Measure long brush stroke responsiveness and memory on 12MP/24MP/48MP assets. Semantic Subject/Sky masks are intentionally deferred and therefore have no claim of automatic scene selection.
+
+Known Limitations:
+
+- The Phase 7 scope intentionally provides manual linear/radial/brush masks only; no AI subject or sky segmentation is included.
+- A very dense brush is bounded at 512 samples to protect render cost. The cap favors predictable editing latency over an unbounded geometric stroke representation.
 
 ## Phase 8
 

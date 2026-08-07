@@ -14,6 +14,7 @@ immutable original CIImage (EXIF orientation applied at load)
 → vibrance
 → eight-channel HSL mixer
 → master / red / green / blue tone curves
+→ local linear / radial / brush mask adjustments
 → optional Creative LUT and 0…100% alpha blend
 → sharpness
 → vignette
@@ -37,4 +38,4 @@ immutable original CIImage at full resolution
 
 ## Phase 5–6 color management
 
-`ImagePipeline` 的单一 `CIContext` 以 Extended Linear sRGB + RGBA half-float 为工作空间；嵌入 profile 的 ImageIO 图像交由 Core Image 进行色彩处理，无 profile 的标准照片在读取时显式附着 sRGB。渲染顺序为 Source → Working → Technical → Creative Adjustments → Creative LUT → Output。`.cube` 不可靠地携带色彩空间信息，故导入时不再默认 sRGB；LUT 必须由用户声明种类和输入/输出色彩空间后才可使用。HDR 源的 SDR 输出在全部调整完成后进行 headroom tone mapping；HDR 输出为 10-bit HEIF Rec.2100 HLG。详见 [color-management.md](color-management.md) 与 [hdr-workflow.md](hdr-workflow.md)。
+`ImagePipeline` 的单一 `CIContext` 以 Extended Linear sRGB + RGBA half-float 为工作空间；嵌入 profile 的 ImageIO 图像交由 Core Image 进行色彩处理，无 profile 的标准照片在读取时显式附着 sRGB。渲染顺序为 Source → Working → Technical → 全局调整 → 局部蒙版调整 → Creative LUT → Output。`.cube` 不可靠地携带色彩空间信息，故导入时不再默认 sRGB；LUT 必须由用户声明种类和输入/输出色彩空间后才可使用。HDR 源的 SDR 输出在全部调整完成后进行 headroom tone mapping；HDR 输出为 10-bit HEIF Rec.2100 HLG。详见 [color-management.md](color-management.md)、[hdr-workflow.md](hdr-workflow.md) 与 [local-adjustments.md](local-adjustments.md)。

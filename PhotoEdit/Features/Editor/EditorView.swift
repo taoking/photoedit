@@ -11,6 +11,7 @@ private enum EditorTool: String, CaseIterable, Identifiable {
     case raw = "RAW"
     case batch = "批量"
     case lut = "LUT"
+    case local = "局部"
     case crop = "裁切"
 
     var id: String { rawValue }
@@ -234,6 +235,7 @@ struct EditorView: View {
                         showingExportOptions: $showingBatchExportOptions
                     )
                 case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
+                case .local: LocalAdjustmentsPanel(model: model)
                 case .crop: CropPanel(model: model)
                 }
             }
@@ -1042,6 +1044,225 @@ private extension BatchItemResult {
         case let .failed(_, message): "失败：\(message)"
         case .cancelled: "已取消"
         }
+    }
+}
+
+private struct LocalAdjustmentsPanel: View {
+    @ObservedObject var model: EditorViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Menu("添加蒙版", systemImage: "plus") {
+                        Button("线性渐变", systemImage: "line.diagonal") { model.addLocalAdjustment(mask: .linear(LinearGradientMask())) }
+                        Button("径向渐变", systemImage: "circle.dashed") { model.addLocalAdjustment(mask: .radial(RadialGradientMask())) }
+                        Button("画笔", systemImage: "paintbrush") { model.addLocalAdjustment(mask: .brush(BrushMask())) }
+                    }
+                    Spacer()
+                    if let selected = model.selectedLocalAdjustment {
+                        Button("删除", systemImage: "trash", role: .destructive) { model.deleteLocalAdjustment(id: selected.id) }
+                    }
+                }
+
+                if model.state.localAdjustments.isEmpty {
+                    ContentUnavailableView("尚未添加局部调整", systemImage: "circle.dashed", description: Text("使用线性、径向渐变或画笔，局部套用曝光、对比度和饱和度。"))
+                } else {
+                    Picker("局部区域", selection: $model.selectedLocalAdjustmentID) {
+                        ForEach(model.state.localAdjustments) { adjustment in
+                            Text("\(adjustment.name) · \(adjustment.mask.title)").tag(Optional(adjustment.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    if let selected = model.selectedLocalAdjustment {
+                        Toggle("启用此局部调整", isOn: binding(for: selected.id, keyPath: \.isEnabled))
+                        maskControls(for: selected)
+                        Divider()
+                        adjustmentSlider("曝光", value: adjustmentBinding(for: selected.id, keyPath: \.exposure), range: -5...5)
+                        adjustmentSlider("对比度", value: adjustmentBinding(for: selected.id, keyPath: \.contrast), range: -100...100)
+                        adjustmentSlider("饱和度", value: adjustmentBinding(for: selected.id, keyPath: \.saturation), range: -100...100)
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+
+    @ViewBuilder
+    private func maskControls(for adjustment: LocalAdjustment) -> some View {
+        switch adjustment.mask {
+        case .linear:
+            GroupBox("线性渐变（白色一端为作用区域）") {
+                VStack(spacing: 6) {
+                    maskSlider("起点 X", value: linearBinding(for: adjustment.id, keyPath: \.start.x))
+                    maskSlider("起点 Y", value: linearBinding(for: adjustment.id, keyPath: \.start.y))
+                    maskSlider("终点 X", value: linearBinding(for: adjustment.id, keyPath: \.end.x))
+                    maskSlider("终点 Y", value: linearBinding(for: adjustment.id, keyPath: \.end.y))
+                }
+            }
+        case .radial:
+            GroupBox("径向渐变") {
+                VStack(spacing: 6) {
+                    maskSlider("中心 X", value: radialPointBinding(for: adjustment.id, keyPath: \.center.x))
+                    maskSlider("中心 Y", value: radialPointBinding(for: adjustment.id, keyPath: \.center.y))
+                    maskSlider("半径", value: radialBinding(for: adjustment.id, keyPath: \.radius))
+                    maskSlider("羽化", value: radialBinding(for: adjustment.id, keyPath: \.feather))
+                }
+            }
+        case let .brush(brush):
+            GroupBox("画笔蒙版") {
+                VStack(spacing: 8) {
+                    BrushMaskCanvas(
+                        points: brush.points,
+                        size: brush.size,
+                        begin: model.beginLocalBrushStroke,
+                        append: { point in model.appendBrushPoint(point, to: adjustment.id) },
+                        end: model.endLocalBrushStroke
+                    )
+                    maskSlider("画笔大小", value: brushBinding(for: adjustment.id, keyPath: \.size))
+                    maskSlider("硬度", value: brushBinding(for: adjustment.id, keyPath: \.hardness))
+                    Button("清除笔触", systemImage: "eraser") {
+                        model.updateLocalAdjustment(id: adjustment.id) {
+                            guard case var .brush(mask) = $0.mask else { return }
+                            mask.points.removeAll()
+                            $0.mask = .brush(mask)
+                        }
+                    }
+                    .disabled(brush.points.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func adjustmentSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+        VStack(spacing: 2) {
+            HStack { Text(title); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(0))).foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: range)
+        }
+    }
+
+    private func maskSlider(_ title: String, value: Binding<Double>) -> some View {
+        VStack(spacing: 2) {
+            HStack { Text(title); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(2))).foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: 0...1)
+        }
+    }
+
+    private func binding(for id: UUID, keyPath: WritableKeyPath<LocalAdjustment, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { model.state.localAdjustments.first(where: { $0.id == id })?[keyPath: keyPath] ?? false },
+            set: { value in model.updateLocalAdjustment(id: id) { $0[keyPath: keyPath] = value } }
+        )
+    }
+
+    private func adjustmentBinding(for id: UUID, keyPath: WritableKeyPath<LocalAdjustmentValues, Double>) -> Binding<Double> {
+        Binding(
+            get: { model.state.localAdjustments.first(where: { $0.id == id })?.adjustments[keyPath: keyPath] ?? 0 },
+            set: { value in model.updateLocalAdjustment(id: id) { $0.adjustments[keyPath: keyPath] = value } }
+        )
+    }
+
+    private func linearBinding(for id: UUID, keyPath: WritableKeyPath<LinearGradientMask, Double>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let adjustment = model.state.localAdjustments.first(where: { $0.id == id }), case let .linear(mask) = adjustment.mask else { return 0 }
+                return mask[keyPath: keyPath]
+            },
+            set: { value in
+                model.updateLocalAdjustment(id: id) {
+                    guard case var .linear(mask) = $0.mask else { return }
+                    mask[keyPath: keyPath] = value.clamped(to: 0...1)
+                    $0.mask = .linear(mask)
+                }
+            }
+        )
+    }
+
+    private func radialPointBinding(for id: UUID, keyPath: WritableKeyPath<RadialGradientMask, Double>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let adjustment = model.state.localAdjustments.first(where: { $0.id == id }), case let .radial(mask) = adjustment.mask else { return 0 }
+                return mask[keyPath: keyPath]
+            },
+            set: { value in
+                model.updateLocalAdjustment(id: id) {
+                    guard case var .radial(mask) = $0.mask else { return }
+                    mask[keyPath: keyPath] = value.clamped(to: 0...1)
+                    $0.mask = .radial(mask)
+                }
+            }
+        )
+    }
+
+    private func radialBinding(for id: UUID, keyPath: WritableKeyPath<RadialGradientMask, Double>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let adjustment = model.state.localAdjustments.first(where: { $0.id == id }), case let .radial(mask) = adjustment.mask else { return 0 }
+                return mask[keyPath: keyPath]
+            },
+            set: { value in
+                model.updateLocalAdjustment(id: id) {
+                    guard case var .radial(mask) = $0.mask else { return }
+                    mask[keyPath: keyPath] = value.clamped(to: 0...1)
+                    $0.mask = .radial(mask)
+                }
+            }
+        )
+    }
+
+    private func brushBinding(for id: UUID, keyPath: WritableKeyPath<BrushMask, Double>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let adjustment = model.state.localAdjustments.first(where: { $0.id == id }), case let .brush(mask) = adjustment.mask else { return 0 }
+                return mask[keyPath: keyPath]
+            },
+            set: { value in
+                model.updateLocalAdjustment(id: id) {
+                    guard case var .brush(mask) = $0.mask else { return }
+                    mask[keyPath: keyPath] = value.clamped(to: 0...1)
+                    $0.mask = .brush(mask)
+                }
+            }
+        )
+    }
+}
+
+private struct BrushMaskCanvas: View {
+    let points: [NormalizedPoint]
+    let size: Double
+    let begin: () -> Void
+    let append: (NormalizedPoint) -> Void
+    let end: () -> Void
+    @State private var isDrawing = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            Canvas { context, canvasSize in
+                context.fill(Path(CGRect(origin: .zero, size: canvasSize)), with: .color(.black.opacity(0.75)))
+                let radius = max(3, min(canvasSize.width, canvasSize.height) * size / 2)
+                for point in points {
+                    let center = CGPoint(x: canvasSize.width * point.x, y: canvasSize.height * (1 - point.y))
+                    context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .color(.white.opacity(0.85)))
+                }
+            }
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard geometry.size.width > 0, geometry.size.height > 0 else { return }
+                    if !isDrawing { isDrawing = true; begin() }
+                    append(NormalizedPoint(x: value.location.x / geometry.size.width, y: 1 - value.location.y / geometry.size.height))
+                }
+                .onEnded { _ in
+                    guard isDrawing else { return }
+                    isDrawing = false
+                    end()
+                }
+            )
+        }
+        .frame(height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityLabel("画笔蒙版画布")
+        .accessibilityHint("在此拖动可添加局部调整笔触")
     }
 }
 

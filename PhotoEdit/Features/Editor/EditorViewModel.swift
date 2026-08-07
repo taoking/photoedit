@@ -22,6 +22,7 @@ final class EditorViewModel: ObservableObject {
     @Published private(set) var batchAdjustmentSource = "当前调整"
     @Published private(set) var referencePreviewImage: CGImage?
     @Published var isShowingReference = false
+    @Published var selectedLocalAdjustmentID: UUID?
 
     let lutRepository: LUTRepository
     let presetRepository: PresetRepository
@@ -68,6 +69,9 @@ final class EditorViewModel: ObservableObject {
         batchResults.compactMap {
             if case let .succeeded(_, output) = $0 { output.fileURL } else { nil }
         }
+    }
+    var selectedLocalAdjustment: LocalAdjustment? {
+        state.localAdjustments.first { $0.id == selectedLocalAdjustmentID }
     }
 
     func loadImage(data: Data, sourceName: String) {
@@ -144,6 +148,44 @@ final class EditorViewModel: ObservableObject {
         state.reset()
         lutPreviewCache.clear()
         schedulePreviewRender()
+    }
+
+    func addLocalAdjustment(mask: LocalMask) {
+        let adjustment: LocalAdjustment
+        switch mask {
+        case .linear: adjustment = .linear()
+        case .radial: adjustment = .radial()
+        case .brush: adjustment = .brush()
+        }
+        update { $0.localAdjustments.append(adjustment) }
+        selectedLocalAdjustmentID = adjustment.id
+    }
+
+    func updateLocalAdjustment(id: UUID, change: (inout LocalAdjustment) -> Void) {
+        update { state in
+            guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }) else { return }
+            change(&state.localAdjustments[index])
+        }
+    }
+
+    func beginLocalBrushStroke() { beginContinuousEdit() }
+
+    func appendBrushPoint(_ point: NormalizedPoint, to id: UUID) {
+        updateContinuous { state in
+            guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }),
+                  case var .brush(brush) = state.localAdjustments[index].mask,
+                  brush.points.count < 512,
+                  brush.points.last.map({ hypot($0.x - point.x, $0.y - point.y) > 0.008 }) ?? true else { return }
+            brush.points.append(point)
+            state.localAdjustments[index].mask = .brush(brush)
+        }
+    }
+
+    func endLocalBrushStroke() { endContinuousEdit() }
+
+    func deleteLocalAdjustment(id: UUID) {
+        update { $0.localAdjustments.removeAll { $0.id == id } }
+        if selectedLocalAdjustmentID == id { selectedLocalAdjustmentID = state.localAdjustments.first?.id }
     }
 
     func selectLUT(_ id: UUID?) {
@@ -445,6 +487,7 @@ final class EditorViewModel: ObservableObject {
     private func install(asset: ImageAsset) {
         self.asset = asset
         state = .initial
+        selectedLocalAdjustmentID = nil
         if asset.isRAW { state.raw = RAWAdjustments() }
         undoStack.removeAll()
         pendingContinuousUndo = nil

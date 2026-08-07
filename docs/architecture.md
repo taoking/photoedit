@@ -12,7 +12,7 @@ EditorViewModel → EditState → ImagePipeline actor → long-lived Metal CICon
 SwiftUI preview                         ImageExporter / Photos / Files / Share
 ```
 
-`EditState` 是纯值类型，并按 light、color、detail、effects、lut、transform 分组。它不含 `CIImage`、`UIImage`、滤镜或可变全局状态，因此支持复制、JSON 序列化、撤销以及后续的预设和选择性粘贴。
+`EditState` 是纯值类型，并按 light、color、detail、effects、lut、localAdjustments、transform 分组。它不含 `CIImage`、`UIImage`、滤镜或可变全局状态，因此支持复制、JSON 序列化、撤销以及后续的预设和选择性粘贴。新增字段通过 `decodeIfPresent` 回退到默认值，历史预设不会因缺失局部蒙版字段而失效。
 
 Phase 2 扩展了 `hsl` 与 `curves` 两个可编码子模型。HSL 通过一个按 Hue/Saturation 软选择的 `CIColorKernel` 顺序处理八个色相区；Core Image 没有可正确表达八色独立 H/S/L 的内置组合。曲线模型保存任意数量的有序点，并在渲染时采样为 64³ Core Image Color Cube；端点不可删除、内部点不会越过相邻 X 坐标。`CI_SILENCE_GL_DEPRECATION` 只用于抑制 Apple 已知的 Kernel Language API 标注，运行时仍由 Core Image 执行；若未来平台移除此 API，Phase 2 的处理器边界可替换为 Metal 实现。
 
@@ -24,4 +24,4 @@ LUT 元数据与原始 `.cube` 文件分开保存：导入文件复制至 `Appli
 
 预设采用 Codable JSON，保存 light/color/HSL/curve/detail/effects/LUT 与强度；除非创建时明确选择，否则不会写入 transform。`PresetRepository` 将库持久化到 `Application Support/PhotoEdit/Presets.json`，而 `AdjustmentClipboard` 保持应用内全部或分组选择性粘贴所需的值状态。
 
-后续 Phase 2 将向 `EditState` 加入 HSL、曲线与直方图，且不会将滤镜逻辑推回 View。RAW、批处理、色彩管理、HDR、蒙版和视频会在自己的输入/任务模型中接入现有状态与 LUT 模块。
+Phase 7 的 `LocalAdjustment` 是 `EditState` 的值类型子模型，每项持有一个线性、径向或画笔蒙版及独立参数；`LocalAdjustmentProcessor` 在图像层执行合成，View 只编辑模型。视频不会复用静态 `ImagePipeline`，而是在 Phase 8 使用独立 AVFoundation composition。

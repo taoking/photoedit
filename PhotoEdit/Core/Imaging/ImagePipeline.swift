@@ -158,6 +158,7 @@ actor ImagePipeline {
             image = try applyTechnicalLUT(technicalLUT, to: image)
         }
         image = try applyAdjustments(to: image, state: state)
+        image = try LocalAdjustmentProcessor.apply(state.localAdjustments, to: image)
         if let lut, state.lut.intensity > 0 {
             let lutImage = try applyCreativeLUT(lut, to: image)
             image = blend(base: image, lutImage: lutImage, amount: state.lut.intensity)
