@@ -78,7 +78,28 @@ Known Limitations:
 
 ## Phase 3
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 3 commit in Git history
+
+Tests: PASS — 24 tests, 0 failures (includes all prior regression tests).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Implemented:
+
+- DNG/ARW 文件识别与 `CIRAWFilter` 解码层，RAW 参数独立于通用 `EditState` 调整。
+- Draft 低分辨率 Preview 和全分辨率 Export decode 策略；RAW 输出随后进入同一标准编辑/LUT/导出管线。
+- RAW Exposure、Temperature、Tint、双降噪、Sharpness、Detail、Local Tone 与 lens correction 控制。
+- Camera、Lens、Aperture、Shutter、ISO 与 Focal Length 元数据展示。
+
+Manual Verification Required:
+
+- 用 Sony A7C II ARW 和 DNG 在真机验证 `CIRAWFilter` 支持、相机白平衡、镜头校正、draft→高质量预览与全分辨率导出。
+
+Known Limitations:
+
+- 工作区没有可合法纳入仓库的真实 DNG/ARW fixture，因此无法自动验证厂商 RAW decoder 兼容性；这是人工验收项，不影响标准照片回归。
 
 ## Phase 4
 

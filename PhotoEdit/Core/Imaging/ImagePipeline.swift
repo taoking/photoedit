@@ -71,6 +71,17 @@ actor ImagePipeline {
         return output
     }
 
+    func render(asset: ImageAsset, state: EditState, lut: LUT?, mode: RenderMode, rawQuality: RAWRenderQuality? = nil) throws -> CGImage {
+        let source: CIImage
+        if let raw = asset.rawSource {
+            let quality = rawQuality ?? (mode.maximumDimension == nil ? .fullResolution : .fastPreview)
+            source = try raw.decode(adjustments: state.raw ?? RAWAdjustments(), quality: quality)
+        } else {
+            source = asset.fullResolutionImage
+        }
+        return try render(image: source, state: state, lut: lut, mode: mode)
+    }
+
     /// 直方图只读取下采样 Preview Source；不参与 Slider 的全分辨率渲染路径。
     func histogram(for source: CIImage, maximumDimension: Int = 512) throws -> Histogram {
         let image = downsample(normalizedExtent(source), maximumDimension: maximumDimension)
@@ -100,6 +111,11 @@ actor ImagePipeline {
             }
         }
         return histogram
+    }
+
+    func histogram(for asset: ImageAsset, maximumDimension: Int = 512) throws -> Histogram {
+        let source = try asset.rawSource?.decode(adjustments: RAWAdjustments(), quality: .fastPreview) ?? asset.fullResolutionImage
+        return try histogram(for: source, maximumDimension: maximumDimension)
     }
 
     private func applyAdjustments(to source: CIImage, state: EditState, lut: LUT?) throws -> CIImage {

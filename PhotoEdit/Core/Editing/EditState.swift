@@ -10,12 +10,26 @@ struct EditState: Codable, Equatable, Sendable {
     var effects = EffectAdjustments()
     var lut = LUTAdjustment()
     var transform = TransformAdjustment()
+    /// 仅 RAW 资产存在；标准 JPEG/HEIF/PNG 保持 nil，避免混入通用调色层。
+    var raw: RAWAdjustments?
 
     static let initial = EditState()
 
     mutating func reset() {
         self = .initial
     }
+}
+
+struct RAWAdjustments: Codable, Equatable, Sendable {
+    var exposure: Double = 0
+    var temperature: Double = 0
+    var tint: Double = 0
+    var luminanceNoiseReduction: Double = 0
+    var colorNoiseReduction: Double = 0
+    var sharpness: Double = 0
+    var detail: Double = 0
+    var localTone: Double = 0
+    var lensCorrectionEnabled = true
 }
 
 struct LightAdjustments: Codable, Equatable, Sendable {

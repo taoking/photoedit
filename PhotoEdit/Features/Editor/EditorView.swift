@@ -7,6 +7,7 @@ private enum EditorTool: String, CaseIterable, Identifiable {
     case hsl = "HSL"
     case curves = "曲线"
     case presets = "预设"
+    case raw = "RAW"
     case lut = "LUT"
     case crop = "裁切"
 
@@ -60,7 +61,7 @@ struct EditorView: View {
         }
         .fileImporter(
             isPresented: $showingImageImporter,
-            allowedContentTypes: [.jpeg, .heic, .heif, .png]
+            allowedContentTypes: [.jpeg, .heic, .heif, .png, UTType(filenameExtension: "dng") ?? .data, UTType(filenameExtension: "arw") ?? .data]
         ) { result in
             if case let .success(url) = result { model.loadImage(url: url) }
             else if case let .failure(error) = result { model.errorMessage = error.localizedDescription }
@@ -191,6 +192,7 @@ struct EditorView: View {
                             showingPresetFileExporter = true
                         }
                     )
+                case .raw: RAWPanel(model: model)
                 case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
                 case .crop: CropPanel(model: model)
                 }
@@ -401,6 +403,63 @@ private struct HSLPanel: View {
                 if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
             })
         }
+    }
+}
+
+private struct RAWPanel: View {
+    @ObservedObject var model: EditorViewModel
+
+    var body: some View {
+        ScrollView {
+            if let metadata = model.asset?.cameraMetadata, model.state.raw != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("RAW Decode").font(.headline)
+                    MetadataGrid(metadata: metadata)
+                    rawSlider("RAW 曝光", keyPath: \.exposure, range: -5...5)
+                    rawSlider("RAW 色温", keyPath: \.temperature, range: -100...100)
+                    rawSlider("RAW 色调", keyPath: \.tint, range: -100...100)
+                    rawSlider("明度降噪", keyPath: \.luminanceNoiseReduction, range: 0...1)
+                    rawSlider("色彩降噪", keyPath: \.colorNoiseReduction, range: 0...1)
+                    rawSlider("RAW 锐化", keyPath: \.sharpness, range: 0...1)
+                    rawSlider("细节", keyPath: \.detail, range: 0...3)
+                    rawSlider("局部色调", keyPath: \.localTone, range: 0...1)
+                    Toggle("镜头校正", isOn: Binding(get: { model.state.raw?.lensCorrectionEnabled ?? false }, set: { value in model.update { $0.raw?.lensCorrectionEnabled = value } }))
+                    Text("Preview 先使用 CIRAWFilter draft decode；导出重新以全分辨率 RAW decode。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .padding()
+            } else {
+                ContentUnavailableView("当前不是 RAW 照片", systemImage: "camera.aperture", description: Text("从文件导入 DNG 或 Sony ARW 后可使用 RAW 调整。"))
+            }
+        }
+    }
+
+    private func rawSlider(_ title: String, keyPath: WritableKeyPath<RAWAdjustments, Double>, range: ClosedRange<Double>) -> some View {
+        let value = Binding<Double>(get: { model.state.raw?[keyPath: keyPath] ?? 0 }, set: { newValue in model.updateContinuous { $0.raw?[keyPath: keyPath] = newValue } })
+        return VStack(spacing: 2) {
+            HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(2)))").foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: range, onEditingChanged: { editing in if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() } })
+        }
+    }
+}
+
+private struct MetadataGrid: View {
+    let metadata: CameraMetadata
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+            row("相机", metadata.camera)
+            row("镜头", metadata.lens)
+            row("光圈", metadata.aperture.map { String(format: "f/%.1f", $0) })
+            row("快门", metadata.shutterSeconds.map { String(format: "%.4f s", $0) })
+            row("ISO", metadata.iso.map { String(format: "%.0f", $0) })
+            row("焦距", metadata.focalLength.map { String(format: "%.0f mm", $0) })
+        }
+        .font(.caption)
+    }
+
+    @ViewBuilder private func row(_ label: String, _ value: String?) -> some View {
+        if let value { GridRow { Text(label).foregroundStyle(.secondary); Text(value) } }
     }
 }
 

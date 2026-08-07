@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01DF6202A2B3C9F65C7DA891 /* RAWStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */; };
 		02C911BA70490726C694869A /* EditState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66E993FB58BF014855131BC /* EditState.swift */; };
+		08E312F792F11E95A2D0BA8B /* RAWImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */; };
 		2438A7C79B393E995E9D3C61 /* ImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */; };
 		2EB4E7AA9FCFF664191C1DED /* PresetRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DBFA4C155DDCE507248A676 /* PresetRepository.swift */; };
 		32708E3C2A2F9FDCF7633A5E /* AdjustmentClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56831466C51EE1F7C63336A1 /* AdjustmentClipboard.swift */; };
@@ -50,6 +52,7 @@
 		165FC84A048BA7AC0120792A /* TestLUTFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestLUTFactory.swift; sourceTree = "<group>"; };
 		1DDFB7C02B46526D3CA01BC8 /* AdjustmentClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjustmentClipboardTests.swift; sourceTree = "<group>"; };
 		4485F1963C17129A1731684D /* ImagePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipelineTests.swift; sourceTree = "<group>"; };
+		4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAWStateTests.swift; sourceTree = "<group>"; };
 		4DBFA4C155DDCE507248A676 /* PresetRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetRepository.swift; sourceTree = "<group>"; };
 		56831466C51EE1F7C63336A1 /* AdjustmentClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjustmentClipboard.swift; sourceTree = "<group>"; };
 		5764FA663230295540E60D4B /* LUTRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTRepositoryTests.swift; sourceTree = "<group>"; };
@@ -63,6 +66,7 @@
 		8706CA9D5A39A92A7EDAD53F /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8BEF67F7A9096F9B1E36C625 /* ToneCurveProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveProcessor.swift; sourceTree = "<group>"; };
 		A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUT.swift; sourceTree = "<group>"; };
+		C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAWImageSource.swift; sourceTree = "<group>"; };
 		CF61BBC4CB543268C98A760C /* ImageAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAsset.swift; sourceTree = "<group>"; };
 		E3FA3ACA8E090F59EF6AA225 /* PhotoEditApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoEditApp.swift; sourceTree = "<group>"; };
 		E4C1A9981C3314F85DB9D060 /* ImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageExporter.swift; sourceTree = "<group>"; };
@@ -90,6 +94,7 @@
 				4485F1963C17129A1731684D /* ImagePipelineTests.swift */,
 				5764FA663230295540E60D4B /* LUTRepositoryTests.swift */,
 				154471C40FC2F383F7A1BD3D /* PresetRepositoryTests.swift */,
+				4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */,
 				165FC84A048BA7AC0120792A /* TestLUTFactory.swift */,
 			);
 			name = PhotoEditTests;
@@ -134,6 +139,7 @@
 				CF61BBC4CB543268C98A760C /* ImageAsset.swift */,
 				012F03CD15BE83115A217ACC /* ImageEditorError.swift */,
 				F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */,
+				C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */,
 			);
 			path = Imaging;
 			sourceTree = "<group>";
@@ -288,6 +294,7 @@
 				DD3C7BD568BEA21919B2F617 /* ImagePipelineTests.swift in Sources */,
 				A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */,
 				4496C0D55DC6BE48BB771EC9 /* PresetRepositoryTests.swift in Sources */,
+				01DF6202A2B3C9F65C7DA891 /* RAWStateTests.swift in Sources */,
 				E771E7D2BC1B65713A2F0510 /* TestLUTFactory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -311,6 +318,7 @@
 				611C6908DE55FF45841EA307 /* LUTRepository.swift in Sources */,
 				CFE097000B25BE070797F881 /* PhotoEditApp.swift in Sources */,
 				2EB4E7AA9FCFF664191C1DED /* PresetRepository.swift in Sources */,
+				08E312F792F11E95A2D0BA8B /* RAWImageSource.swift in Sources */,
 				52B763F2F9C7EB9EFA040EF3 /* ToneCurveProcessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -221,7 +221,7 @@ final class EditorViewModel: ObservableObject {
             renderState.lut.selectedLUTID = id
             renderState.lut.intensity = 1
             guard let image = try? await pipeline.render(
-                image: asset.fullResolutionImage,
+                asset: asset,
                 state: renderState,
                 lut: lut,
                 mode: .preview(maximumDimension: 256)
@@ -262,6 +262,7 @@ final class EditorViewModel: ObservableObject {
     private func install(asset: ImageAsset) {
         self.asset = asset
         state = .initial
+        if asset.isRAW { state.raw = RAWAdjustments() }
         undoStack.removeAll()
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
@@ -288,7 +289,7 @@ final class EditorViewModel: ObservableObject {
         guard let asset else { return }
         Task { [weak self, pipeline, asset] in
             let image = try? await pipeline.render(
-                image: asset.fullResolutionImage,
+                asset: asset,
                 state: .initial,
                 lut: nil,
                 mode: .preview(maximumDimension: 2048)
@@ -311,7 +312,7 @@ final class EditorViewModel: ObservableObject {
         renderTask = Task { [weak self, pipeline, asset, state, lut] in
             do {
                 let rendered = try await pipeline.render(
-                    image: asset.fullResolutionImage,
+                    asset: asset,
                     state: state,
                     lut: lut,
                     mode: .preview(maximumDimension: 2048)
@@ -344,7 +345,7 @@ final class EditorViewModel: ObservableObject {
         histogramTask = Task { [weak self, pipeline, asset] in
             do {
                 try await Task.sleep(nanoseconds: 160_000_000)
-                let computed = try await pipeline.histogram(for: asset.fullResolutionImage, maximumDimension: 512)
+                let computed = try await pipeline.histogram(for: asset, maximumDimension: 512)
                 guard !Task.isCancelled, self?.asset?.id == id else { return }
                 self?.histogram = computed
             } catch is CancellationError {

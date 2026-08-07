@@ -39,7 +39,7 @@ enum ImageExporter {
         pipeline: ImagePipeline = .shared
     ) async throws -> ExportedImage {
         let image = try await pipeline.render(
-            image: asset.fullResolutionImage,
+            asset: asset,
             state: state,
             lut: lut,
             mode: .export(maximumDimension: settings.maximumDimension)
