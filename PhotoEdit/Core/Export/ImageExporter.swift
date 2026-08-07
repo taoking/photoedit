@@ -72,6 +72,7 @@ enum ImageExporter {
         asset: ImageAsset,
         state: EditState,
         lut: LUT?,
+        technicalLUT: LUT? = nil,
         settings: ExportSettings,
         sequenceNumber: Int? = nil,
         pipeline: ImagePipeline = .shared
@@ -80,6 +81,7 @@ enum ImageExporter {
             asset: asset,
             state: state,
             lut: lut,
+            technicalLUT: technicalLUT,
             mode: .export(maximumDimension: settings.maximumDimension)
         )
         try Task.checkCancellation()

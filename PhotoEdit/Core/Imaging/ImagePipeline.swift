@@ -35,30 +35,50 @@ struct Histogram: Equatable, Sendable {
 actor ImagePipeline {
     static let shared = ImagePipeline()
 
-    private let workingColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    /// SDR 编辑使用线性 sRGB；Extended Linear 作为明确的 LUT 边界保留，HDR 渲染在 Phase 6 单独开启。
+    private let workingColorSpaceDescriptor = ColorSpaceDescriptor.linearSRGB
+    private let outputColorSpaceDescriptor = ColorSpaceDescriptor.sRGB
+    private let workingColorSpace = CGColorSpace(name: CGColorSpace.linearSRGB)!
     private let context: CIContext
 
     init() {
         if let device = MTLCreateSystemDefaultDevice() {
             context = CIContext(mtlDevice: device, options: [
-                .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                .workingColorSpace: CGColorSpace(name: CGColorSpace.linearSRGB)!,
                 .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!
             ])
         } else {
             context = CIContext(options: [
-                .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+                .workingColorSpace: CGColorSpace(name: CGColorSpace.linearSRGB)!,
                 .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!
             ])
         }
     }
 
-    func render(image source: CIImage, state: EditState, lut: LUT?, mode: RenderMode) throws -> CGImage {
+    func render(
+        image source: CIImage,
+        state: EditState,
+        lut: LUT?,
+        technicalLUT: LUT? = nil,
+        sourceColorSpace: ColorSpaceDescriptor = .sRGB,
+        mode: RenderMode
+    ) throws -> CGImage {
         try Task.checkCancellation()
+        _ = try colorRenderPlan(source: sourceColorSpace, technicalLUT: technicalLUT, creativeLUT: lut)
+        // CIContext 的工作/输出色彩空间负责系统级的图像色彩匹配。不要在图像图中
+        // 再叠加 `matchedToWorkingSpace`：对无 ICC profile 的 CIImage 该 API 会生成黑帧。
         var image = normalizedExtent(source)
         if case let .preview(maximumDimension) = mode {
             image = downsample(image, maximumDimension: maximumDimension)
         }
-        image = try applyAdjustments(to: image, state: state, lut: lut)
+        if let technicalLUT {
+            image = try applyTechnicalLUT(technicalLUT, to: image)
+        }
+        image = try applyAdjustments(to: image, state: state)
+        if let lut, state.lut.intensity > 0 {
+            let lutImage = try applyCreativeLUT(lut, to: image)
+            image = blend(base: image, lutImage: lutImage, amount: state.lut.intensity)
+        }
         image = applyTransform(to: image, transform: state.transform)
         if case let .export(maximumDimension?) = mode {
             image = downsample(image, maximumDimension: maximumDimension)
@@ -71,7 +91,14 @@ actor ImagePipeline {
         return output
     }
 
-    func render(asset: ImageAsset, state: EditState, lut: LUT?, mode: RenderMode, rawQuality: RAWRenderQuality? = nil) throws -> CGImage {
+    func render(
+        asset: ImageAsset,
+        state: EditState,
+        lut: LUT?,
+        technicalLUT: LUT? = nil,
+        mode: RenderMode,
+        rawQuality: RAWRenderQuality? = nil
+    ) throws -> CGImage {
         let source: CIImage
         if let raw = asset.rawSource {
             let quality: RAWRenderQuality
@@ -90,7 +117,40 @@ actor ImagePipeline {
         } else {
             source = asset.fullResolutionImage
         }
-        return try render(image: source, state: state, lut: lut, mode: mode)
+        return try render(
+            image: source,
+            state: state,
+            lut: lut,
+            technicalLUT: technicalLUT,
+            sourceColorSpace: asset.sourceColorSpace ?? .sRGB,
+            mode: mode
+        )
+    }
+
+    func colorRenderPlan(source: ColorSpaceDescriptor, technicalLUT: LUT?, creativeLUT: LUT?) throws -> ColorRenderPlan {
+        if let technicalLUT {
+            guard technicalLUT.kind == .technical else {
+                throw ColorManagementError.invalidTechnicalLUT(name: technicalLUT.title ?? "未命名 LUT")
+            }
+            guard technicalLUT.colorMetadata.isComplete else {
+                throw ColorManagementError.invalidTechnicalLUT(name: technicalLUT.title ?? "未命名 LUT")
+            }
+        }
+        if let creativeLUT {
+            guard creativeLUT.kind == .creative else {
+                throw ColorManagementError.missingLUTMetadata(name: creativeLUT.title ?? "未命名 LUT")
+            }
+            guard creativeLUT.colorMetadata.isComplete else {
+                throw ColorManagementError.missingLUTMetadata(name: creativeLUT.title ?? "未命名 LUT")
+            }
+        }
+        return ColorRenderPlan(
+            source: source,
+            working: workingColorSpaceDescriptor,
+            hasTechnicalTransform: technicalLUT != nil,
+            hasCreativeLUT: creativeLUT != nil,
+            output: outputColorSpaceDescriptor
+        )
     }
 
     /// 直方图只读取下采样 Preview Source；不参与 Slider 的全分辨率渲染路径。
@@ -129,7 +189,7 @@ actor ImagePipeline {
         return try histogram(for: source, maximumDimension: maximumDimension)
     }
 
-    private func applyAdjustments(to source: CIImage, state: EditState, lut: LUT?) throws -> CIImage {
+    private func applyAdjustments(to source: CIImage, state: EditState) throws -> CIImage {
         var image = source
         image = try applyingFilter("CIExposureAdjust", to: image, values: [kCIInputEVKey: AdjustmentMapper.exposureEV(state.light.exposure)])
         image = try applyingFilter("CIHighlightShadowAdjust", to: image, values: [
@@ -151,10 +211,6 @@ actor ImagePipeline {
         image = try HSLProcessor.apply(state.hsl, to: image)
         image = try ToneCurveProcessor.apply(state.curves, to: image, workingColorSpace: workingColorSpace)
 
-        if let lut, state.lut.intensity > 0 {
-            let lutImage = try LUTProcessor.apply(lut, to: image, workingColorSpace: workingColorSpace)
-            image = blend(base: image, lutImage: lutImage, amount: state.lut.intensity)
-        }
         if state.detail.sharpness > 0 {
             image = try applyingFilter("CIUnsharpMask", to: image, values: [
                 kCIInputRadiusKey: 2.5,
@@ -168,6 +224,22 @@ actor ImagePipeline {
             ])
         }
         return image
+    }
+
+    private func applyTechnicalLUT(_ lut: LUT, to image: CIImage) throws -> CIImage {
+        guard lut.colorMetadata.inputColorSpace != nil, lut.colorMetadata.outputColorSpace != nil else {
+            throw ColorManagementError.invalidTechnicalLUT(name: lut.title ?? "未命名 LUT")
+        }
+        return try LUTProcessor.apply(lut, to: image)
+    }
+
+    private func applyCreativeLUT(_ lut: LUT, to image: CIImage) throws -> CIImage {
+        guard lut.kind == .creative,
+              lut.colorMetadata.inputColorSpace != nil,
+              lut.colorMetadata.outputColorSpace != nil else {
+            throw ColorManagementError.missingLUTMetadata(name: lut.title ?? "未命名 LUT")
+        }
+        return try LUTProcessor.apply(lut, to: image)
     }
 
     private func blend(base: CIImage, lutImage: CIImage, amount: Double) -> CIImage {

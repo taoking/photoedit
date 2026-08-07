@@ -786,15 +786,16 @@ private struct LUTPanel: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
-                    LUTCard(name: "无", image: nil, selected: model.state.lut.selectedLUTID == nil)
+                    LUTCard(name: "无 Creative LUT", subtitle: nil, image: nil, selected: model.state.lut.selectedLUTID == nil)
                         .onTapGesture { model.selectLUT(nil) }
-                    ForEach(model.lutRepository.visibleItems(in: section)) { item in
-                        LUTCard(name: item.name, image: model.thumbnail(for: item.id), selected: item.id == model.state.lut.selectedLUTID)
+                    ForEach(creativeItems) { item in
+                        LUTCard(name: item.name, subtitle: item.colorMetadata.summary, image: model.thumbnail(for: item.id), selected: item.id == model.state.lut.selectedLUTID)
                             .onTapGesture { model.selectLUT(item.id) }
                             .contextMenu {
                                 Button(item.isFavorite ? "取消收藏" : "收藏", systemImage: item.isFavorite ? "star.slash" : "star") {
                                     try? model.lutRepository.toggleFavorite(id: item.id)
                                 }
+                                colorConfigurationMenu(for: item)
                                 if item.source == .imported {
                                     Button("重命名", systemImage: "pencil") {
                                         renameItem = item
@@ -802,6 +803,7 @@ private struct LUTPanel: View {
                                     }
                                     Button("删除", systemImage: "trash", role: .destructive) {
                                         if model.state.lut.selectedLUTID == item.id { model.selectLUT(nil) }
+                                        if model.state.lut.technicalLUTID == item.id { model.selectTechnicalLUT(nil) }
                                         try? model.lutRepository.delete(id: item.id)
                                     }
                                 }
@@ -809,6 +811,26 @@ private struct LUTPanel: View {
                     }
                 }
                 .padding(.horizontal)
+            }
+            if technicalItems.isEmpty {
+                Text("Technical LUT 会先完成 Log/HLG 等输入到工作空间的变换，且不参与强度混合。")
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
+            } else {
+                Picker("Technical Transform", selection: Binding(
+                    get: { model.state.lut.technicalLUTID },
+                    set: { model.selectTechnicalLUT($0) }
+                )) {
+                    Text("无 Technical LUT").tag(UUID?.none)
+                    ForEach(technicalItems) { item in
+                        Text("\(item.name)（\(item.colorMetadata.summary)）").tag(Optional(item.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal)
+                if let item = technicalItems.first(where: { $0.id == model.state.lut.technicalLUTID }) {
+                    Menu("配置 \(item.name)") { colorConfigurationMenu(for: item) }
+                        .padding(.horizontal)
+                }
             }
         }
         .alert("重命名 LUT", isPresented: Binding(
@@ -822,10 +844,45 @@ private struct LUTPanel: View {
             }
         }
     }
+
+    private var creativeItems: [LUTCatalogItem] {
+        model.lutRepository.visibleItems(in: section).filter { $0.kind == .creative }
+    }
+
+    private var technicalItems: [LUTCatalogItem] {
+        model.lutRepository.items.filter { $0.kind == .technical }
+    }
+
+    @ViewBuilder
+    private func colorConfigurationMenu(for item: LUTCatalogItem) -> some View {
+        Menu("LUT 类型") {
+            ForEach(LUTKind.allCases) { kind in
+                Button(kind.title) { model.configureLUT(id: item.id, kind: kind, colorMetadata: item.colorMetadata) }
+            }
+        }
+        Menu("色彩空间") {
+            Button("未指定（安全地禁用套用）") {
+                model.configureLUT(id: item.id, kind: item.kind, colorMetadata: .unspecified)
+            }
+            Button("sRGB → sRGB") {
+                model.configureLUT(id: item.id, kind: item.kind, colorMetadata: .sRGB)
+            }
+            Button("Rec.709 → sRGB") {
+                model.configureLUT(id: item.id, kind: item.kind, colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .sRGB))
+            }
+            Button("Rec.709 HLG → Rec.709") {
+                model.configureLUT(id: item.id, kind: item.kind, colorMetadata: LUTColorMetadata(inputColorSpace: .rec709HLG, outputColorSpace: .rec709))
+            }
+            Button("Display P3 → sRGB") {
+                model.configureLUT(id: item.id, kind: item.kind, colorMetadata: LUTColorMetadata(inputColorSpace: .displayP3, outputColorSpace: .sRGB))
+            }
+        }
+    }
 }
 
 private struct LUTCard: View {
     let name: String
+    let subtitle: String?
     let image: CGImage?
     let selected: Bool
 
@@ -841,6 +898,9 @@ private struct LUTCard: View {
             }
             .frame(width: 92, height: 76)
             Text(name).font(.caption).lineLimit(1).frame(width: 92)
+            if let subtitle {
+                Text(subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.center).frame(width: 92)
+            }
         }
         .padding(4)
         .background(selected ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 10))

@@ -21,5 +21,6 @@ enum TestLUTFactory {
 
     static func identityLUT(dimension: Int = 17) -> LUT {
         try! CUBEParser.parse(text: identityText(dimension: dimension))
+            .configured(kind: .creative, colorMetadata: .sRGB)
     }
 }

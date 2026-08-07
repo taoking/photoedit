@@ -18,6 +18,7 @@ struct BatchExportJob: Sendable {
     let photo: BatchPhoto
     let state: EditState
     let lut: LUT?
+    let technicalLUT: LUT?
     let settings: ExportSettings
 }
 
@@ -51,6 +52,7 @@ actor BatchExportQueue {
                     asset: asset,
                     state: job.state,
                     lut: job.lut,
+                    technicalLUT: job.technicalLUT,
                     settings: job.settings,
                     sequenceNumber: index + 1
                 )

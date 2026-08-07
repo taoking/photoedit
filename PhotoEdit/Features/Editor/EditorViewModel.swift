@@ -145,11 +145,43 @@ final class EditorViewModel: ObservableObject {
     }
 
     func selectLUT(_ id: UUID?) {
+        let kind = id.flatMap { selectedID in lutRepository.items.first(where: { $0.id == selectedID })?.kind }
         update { state in
-            state.lut.selectedLUTID = id
-            if id == nil { state.lut.intensity = 1 }
+            switch kind {
+            case .technical:
+                state.lut.technicalLUTID = id
+            case .creative:
+                state.lut.selectedLUTID = id
+            case nil:
+                state.lut.selectedLUTID = nil
+                state.lut.intensity = 1
+            }
         }
         if let id { recentSettings.record(lut: id) }
+    }
+
+    func selectTechnicalLUT(_ id: UUID?) {
+        update { $0.lut.technicalLUTID = id }
+        if let id { recentSettings.record(lut: id) }
+    }
+
+    func configureLUT(id: UUID, kind: LUTKind, colorMetadata: LUTColorMetadata) {
+        do {
+            try lutRepository.configure(id: id, kind: kind, colorMetadata: colorMetadata)
+            update { state in
+                if state.lut.selectedLUTID == id, kind == .technical {
+                    state.lut.selectedLUTID = nil
+                    state.lut.technicalLUTID = id
+                } else if state.lut.technicalLUTID == id, kind == .creative {
+                    state.lut.technicalLUTID = nil
+                    state.lut.selectedLUTID = id
+                }
+            }
+            lutPreviewCache.clear()
+            schedulePreviewRender()
+        } catch {
+            present(error)
+        }
     }
 
     func resetHSL(_ channel: HSLChannel) {
@@ -238,14 +270,18 @@ final class EditorViewModel: ObservableObject {
         guard let asset else { return nil }
         let thumbnailState = state
         Task { [weak self, pipeline, asset, thumbnailState] in
-            guard let self, let lut = try? self.lutRepository.lut(for: id) else { return }
+            guard let self,
+                  let lut = try? self.lutRepository.lut(for: id),
+                  lut.kind == .creative else { return }
             var renderState = thumbnailState
             renderState.lut.selectedLUTID = id
             renderState.lut.intensity = 1
+            let technicalLUT = self.lut(for: renderState.lut.technicalLUTID)
             guard let image = try? await pipeline.render(
                 asset: asset,
                 state: renderState,
                 lut: lut,
+                technicalLUT: technicalLUT,
                 mode: .preview(maximumDimension: 256)
             ) else { return }
             self.lutPreviewCache[id] = image
@@ -261,10 +297,17 @@ final class EditorViewModel: ObservableObject {
         errorMessage = nil
         recentSettings.record(export: settings)
         let state = state
-        let lut = selectedLUT()
-        exportTask = Task { [weak self, pipeline, asset, state, lut] in
+        let luts = selectedLUTs(for: state)
+        exportTask = Task { [weak self, pipeline, asset, state, luts] in
             do {
-                let output = try await ImageExporter.export(asset: asset, state: state, lut: lut, settings: settings, pipeline: pipeline)
+                let output = try await ImageExporter.export(
+                    asset: asset,
+                    state: state,
+                    lut: luts.creative,
+                    technicalLUT: luts.technical,
+                    settings: settings,
+                    pipeline: pipeline
+                )
                 guard !Task.isCancelled else { return }
                 self?.exportedImage = output
                 self?.isExporting = false
@@ -327,18 +370,28 @@ final class EditorViewModel: ObservableObject {
     }
 
     func applyLUTToBatch(id: UUID?) {
-        batchState.lut.selectedLUTID = id
-        batchState.lut.intensity = 1
+        let kind = id.flatMap { selectedID in lutRepository.items.first(where: { $0.id == selectedID })?.kind }
+        switch kind {
+        case .technical:
+            batchState.lut.technicalLUTID = id
+        case .creative:
+            batchState.lut.selectedLUTID = id
+            batchState.lut.intensity = 1
+        case nil:
+            batchState.lut.selectedLUTID = nil
+            batchState.lut.intensity = 1
+        }
         batchAdjustmentSource = id == nil ? "不使用 LUT" : "LUT：\(lutRepository.items.first(where: { $0.id == id })?.name ?? "已选")"
         if let id { recentSettings.record(lut: id) }
     }
 
     func startBatchExport(settings: ExportSettings) {
         guard !batchPhotos.isEmpty, !isBatchExporting else { return }
-        let lut = lut(for: batchState)
-        guard batchState.lut.selectedLUTID == nil || lut != nil else { return }
+        let luts = selectedLUTs(for: batchState)
+        guard (batchState.lut.selectedLUTID == nil || luts.creative != nil),
+              (batchState.lut.technicalLUTID == nil || luts.technical != nil) else { return }
         let jobs = batchPhotos.map {
-            BatchExportJob(id: $0.id, photo: $0, state: batchState, lut: lut, settings: settings)
+            BatchExportJob(id: $0.id, photo: $0, state: batchState, lut: luts.creative, technicalLUT: luts.technical, settings: settings)
         }
         batchTask?.cancel()
         batchResults.removeAll()
@@ -403,12 +456,12 @@ final class EditorViewModel: ObservableObject {
         present(error)
     }
 
-    private func selectedLUT() -> LUT? {
-        lut(for: state)
+    private func selectedLUTs(for renderState: EditState) -> (creative: LUT?, technical: LUT?) {
+        (lut(for: renderState.lut.selectedLUTID), lut(for: renderState.lut.technicalLUTID))
     }
 
-    private func lut(for renderState: EditState) -> LUT? {
-        guard let id = renderState.lut.selectedLUTID else { return nil }
+    private func lut(for id: UUID?) -> LUT? {
+        guard let id else { return nil }
         do { return try lutRepository.lut(for: id) }
         catch {
             present(error)
@@ -438,14 +491,15 @@ final class EditorViewModel: ObservableObject {
         renderGeneration += 1
         let generation = renderGeneration
         let state = state
-        let lut = selectedLUT()
+        let luts = selectedLUTs(for: state)
         isRendering = true
-        renderTask = Task { [weak self, pipeline, asset, state, lut] in
+        renderTask = Task { [weak self, pipeline, asset, state, luts] in
             do {
                 let rendered = try await pipeline.render(
                     asset: asset,
                     state: state,
-                    lut: lut,
+                    lut: luts.creative,
+                    technicalLUT: luts.technical,
                     mode: .preview(maximumDimension: 2048)
                 )
                 guard !Task.isCancelled, self?.renderGeneration == generation else { return }

@@ -14,6 +14,8 @@ struct ImageAsset: @unchecked Sendable {
     let pixelHeight: Int
     let metadata: [CFString: Any]
     let sourceType: UTType
+    /// ImageIO/CIImage 可识别时保留；无 profile 的标准照片会在读取时明确附着 sRGB fallback。
+    let sourceColorSpace: ColorSpaceDescriptor?
     let rawSource: RAWImageSource?
 
     var isRAW: Bool { rawSource != nil }
@@ -39,11 +41,22 @@ enum ImageLoader {
                 id: UUID(), sourceName: sourceName, fullResolutionImage: image, originalData: data,
                 pixelWidth: (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? Int(image.extent.width),
                 pixelHeight: (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? Int(image.extent.height),
-                metadata: properties, sourceType: type, rawSource: rawSource
+                metadata: properties, sourceType: type, sourceColorSpace: ColorSpaceDescriptor.detect(image.colorSpace), rawSource: rawSource
             )
         }
-        guard supportedTypes.contains(type), let image = CIImage(data: data, options: [.applyOrientationProperty: true]) else {
+        guard supportedTypes.contains(type), let loadedImage = CIImage(data: data, options: [.applyOrientationProperty: true]) else {
             throw ImageEditorError.unsupportedFormat
+        }
+        let sourceColorSpace = ColorSpaceDescriptor.detect(loadedImage.colorSpace)
+        let image: CIImage
+        if sourceColorSpace == nil {
+            guard let fallbackImage = CIImage(data: data, options: [
+                .applyOrientationProperty: true,
+                .colorSpace: ColorSpaceDescriptor.sRGB.cgColorSpace
+            ]) else { throw ImageEditorError.imageLoadFailed }
+            image = fallbackImage
+        } else {
+            image = loadedImage
         }
         let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? Int(image.extent.width)
         let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? Int(image.extent.height)
@@ -56,6 +69,7 @@ enum ImageLoader {
             pixelHeight: height,
             metadata: properties,
             sourceType: type,
+            sourceColorSpace: sourceColorSpace ?? .sRGB,
             rawSource: nil
         )
     }

@@ -67,13 +67,21 @@ final class LUTRepository: ObservableObject {
         try saveCatalog()
     }
 
+    func configure(id: UUID, kind: LUTKind, colorMetadata: LUTColorMetadata) throws {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].kind = kind
+        items[index].colorMetadata = colorMetadata
+        try saveCatalog()
+    }
+
     func lut(for id: UUID) throws -> LUT {
         if id == Self.identityID { return Self.identityLUT() }
         guard let item = items.first(where: { $0.id == id }), let filename = item.fileName else {
             throw ImageEditorError.invalidLUT
         }
         do {
-            return try CUBEParser.parse(data: Data(contentsOf: storageDirectory.appendingPathComponent(filename)))
+            let parsed = try CUBEParser.parse(data: Data(contentsOf: storageDirectory.appendingPathComponent(filename)))
+            return parsed.configured(kind: item.kind, colorMetadata: item.colorMetadata)
         } catch {
             throw ImageEditorError.invalidLUT
         }
@@ -84,6 +92,8 @@ final class LUTRepository: ObservableObject {
         case .all: items
         case .builtIn: items.filter { $0.source == .builtIn }
         case .imported: items.filter { $0.source == .imported }
+        case .creative: items.filter { $0.kind == .creative }
+        case .technical: items.filter { $0.kind == .technical }
         case .favorites: items.filter(\.isFavorite)
         }
     }
@@ -96,7 +106,9 @@ final class LUTRepository: ObservableObject {
             isFavorite: false,
             fileName: nil,
             dimension: 17,
-            importedAt: .distantPast
+            importedAt: .distantPast,
+            kind: .creative,
+            colorMetadata: .sRGB
         )
         guard let data = try? Data(contentsOf: metadataURL),
               let imported = try? JSONDecoder().decode([LUTCatalogItem].self, from: data) else {
@@ -140,7 +152,15 @@ final class LUTRepository: ObservableObject {
                 }
             }
         }
-        return LUT(title: "Neutral", dimension: dimension, domainMin: .clear, domainMax: RGBColor(red: 1, green: 1, blue: 1), values: values)
+        return LUT(
+            title: "Neutral",
+            dimension: dimension,
+            domainMin: .clear,
+            domainMax: RGBColor(red: 1, green: 1, blue: 1),
+            values: values,
+            kind: .creative,
+            colorMetadata: .sRGB
+        )
     }
 }
 

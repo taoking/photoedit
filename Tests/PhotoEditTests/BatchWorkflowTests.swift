@@ -51,8 +51,8 @@ final class BatchWorkflowTests: XCTestCase {
 
         let settings = ExportSettings(format: .jpeg, maximumDimension: 64, jpegQuality: 0.9, keepLocation: false, filenameStrategy: .sequential, filenamePrefix: "Batch")
         let jobs = [
-            BatchExportJob(id: UUID(), photo: BatchPhoto(url: validURL), state: .initial, lut: nil, settings: settings),
-            BatchExportJob(id: UUID(), photo: BatchPhoto(url: root.appendingPathComponent("missing.jpg")), state: .initial, lut: nil, settings: settings)
+            BatchExportJob(id: UUID(), photo: BatchPhoto(url: validURL), state: .initial, lut: nil, technicalLUT: nil, settings: settings),
+            BatchExportJob(id: UUID(), photo: BatchPhoto(url: root.appendingPathComponent("missing.jpg")), state: .initial, lut: nil, technicalLUT: nil, settings: settings)
         ]
         let recorder = ProgressRecorder()
         let results = await BatchExportQueue().run(jobs) { progress in

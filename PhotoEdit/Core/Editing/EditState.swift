@@ -277,7 +277,10 @@ struct EffectAdjustments: Codable, Equatable, Sendable {
 }
 
 struct LUTAdjustment: Codable, Equatable, Sendable {
+    /// Creative LUT 在常规调整之后执行，并支持强度混合。
     var selectedLUTID: UUID?
+    /// Technical LUT 在常规调整之前执行，且始终以 100% 作为色彩变换。
+    var technicalLUTID: UUID?
     /// 0 表示不套 LUT，1 表示完整 LUT。
     var intensity: Double = 1
 }

@@ -4,7 +4,7 @@ import XCTest
 @testable import PhotoEdit
 
 final class ImagePipelineTests: XCTestCase {
-    private let source = CIImage(color: CIColor(red: 0.22, green: 0.48, blue: 0.83, alpha: 1)).cropped(to: CGRect(x: 0, y: 0, width: 1024, height: 640))
+    private let source = ImagePipelineTests.profiledImage(red: 0.22, green: 0.48, blue: 0.83, width: 1024, height: 640)
 
     func testIdentityLUTMatchesBaseRender() async throws {
         let pipeline = ImagePipeline()
@@ -27,6 +27,23 @@ final class ImagePipelineTests: XCTestCase {
         XCTAssertEqual(pixelBytes(base), pixelBytes(output))
     }
 
+    func testTechnicalIdentityLUTIsAppliedBeforeTheCreativeStage() async throws {
+        let pipeline = ImagePipeline()
+        let base = try await pipeline.render(image: source, state: .initial, lut: nil, mode: .preview(maximumDimension: 256))
+        let technical = TestLUTFactory.identityLUT().configured(
+            kind: .technical,
+            colorMetadata: LUTColorMetadata(inputColorSpace: .sRGB, outputColorSpace: .sRGB)
+        )
+        let output = try await pipeline.render(
+            image: source,
+            state: .initial,
+            lut: nil,
+            technicalLUT: technical,
+            mode: .preview(maximumDimension: 256)
+        )
+        assertPixelsEqual(pixelBytes(base), pixelBytes(output), tolerance: 1)
+    }
+
     func testPreviewDownsamplesButFullExportDoesNot() async throws {
         let pipeline = ImagePipeline()
         let preview = try await pipeline.render(image: source, state: .initial, lut: nil, mode: .preview(maximumDimension: 256))
@@ -46,7 +63,7 @@ final class ImagePipelineTests: XCTestCase {
     }
 
     func testHSLDesaturatesSelectedRedRange() async throws {
-        let redSource = CIImage(color: CIColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1)).cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
+        let redSource = Self.profiledImage(red: 0.9, green: 0.1, blue: 0.1, width: 128, height: 128)
         var state = EditState()
         state.hsl.red.saturation = -100
         let pipeline = ImagePipeline()
@@ -84,7 +101,7 @@ final class ImagePipelineTests: XCTestCase {
 
     func testJPEGExportCreatesNewDecodableFile() async throws {
         let asset = ImageAsset(
-            id: UUID(), sourceName: "Test", fullResolutionImage: source, originalData: Data(), pixelWidth: 1024, pixelHeight: 640, metadata: [:], sourceType: .png, rawSource: nil
+            id: UUID(), sourceName: "Test", fullResolutionImage: source, originalData: Data(), pixelWidth: 1024, pixelHeight: 640, metadata: [:], sourceType: .png, sourceColorSpace: .sRGB, rawSource: nil
         )
         let output = try await ImageExporter.export(asset: asset, state: .initial, lut: nil, settings: ExportSettings(format: .jpeg, maximumDimension: nil, jpegQuality: 0.9, keepLocation: false))
         defer { try? FileManager.default.removeItem(at: output.fileURL) }
@@ -97,6 +114,14 @@ final class ImagePipelineTests: XCTestCase {
         guard let data = image.dataProvider?.data else { return [] }
         guard let bytes = CFDataGetBytePtr(data) else { return [] }
         return Array(UnsafeBufferPointer(start: bytes, count: CFDataGetLength(data)))
+    }
+
+    private static func profiledImage(red: CGFloat, green: CGFloat, blue: CGFloat, width: Int, height: Int) -> CIImage {
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let source = CIImage(color: CIColor(red: red, green: green, blue: blue, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
+        let cgImage = CIContext().createCGImage(source, from: source.extent, format: .RGBA8, colorSpace: colorSpace)!
+        return CIImage(cgImage: cgImage, options: [.colorSpace: colorSpace])
     }
 
     private func assertPixelsEqual(_ lhs: [UInt8], _ rhs: [UInt8], tolerance: UInt8, file: StaticString = #filePath, line: UInt = #line) {

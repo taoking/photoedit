@@ -15,9 +15,19 @@ final class LUTRepositoryTests: XCTestCase {
         try repository.importLUT(from: source)
         let imported = try XCTUnwrap(repository.items.first(where: { $0.source == .imported }))
         XCTAssertEqual(try repository.lut(for: imported.id).dimension, 17)
+        XCTAssertEqual(imported.kind, .creative)
+        XCTAssertFalse(imported.colorMetadata.isComplete)
+
+        try repository.configure(
+            id: imported.id,
+            kind: .technical,
+            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .sRGB)
+        )
 
         let reopened = LUTRepository(storageDirectory: storage)
         XCTAssertEqual(reopened.items.first(where: { $0.id == imported.id })?.name, "Warm")
+        XCTAssertEqual(reopened.items.first(where: { $0.id == imported.id })?.kind, .technical)
+        XCTAssertEqual(try reopened.lut(for: imported.id).colorMetadata.inputColorSpace, .rec709)
         try reopened.rename(id: imported.id, to: "Renamed")
         try reopened.toggleFavorite(id: imported.id)
         XCTAssertEqual(reopened.visibleItems(in: .favorites).map(\.id), [imported.id])

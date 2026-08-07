@@ -2,7 +2,7 @@
 
 PhotoEdit 是一个原生 SwiftUI iOS 照片编辑器，面向日常旅行摄影与 `.cube` LUT 工作流。应用使用 Core Image 与长生命周期 Metal-backed `CIContext`；编辑状态是可序列化、非破坏性的。
 
-当前已完成 Phase 1 至 Phase 4：包含基础调色、LUT、HSL、曲线、预设、基于 `CIRAWFilter` 的 DNG/ARW RAW 调整，以及受控顺序的批量处理、最近设置和参考照片对照。后续阶段状态以 [development-progress.md](docs/development-progress.md) 为准。
+当前已完成 Phase 1 至 Phase 5：包含基础调色、LUT、HSL、曲线、预设、基于 `CIRAWFilter` 的 DNG/ARW RAW 调整、受控顺序的批量处理，以及色彩管理与 Creative/Technical LUT 分流。后续阶段状态以 [development-progress.md](docs/development-progress.md) 为准。
 
 ## Build and test
 
@@ -16,6 +16,6 @@ xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform
 
 ## 当前色彩假设与限制
 
-Phase 1 面向标准动态范围照片和 Creative LUT。工作空间为线性 sRGB；导入图像的方向会在读取时规范化。LUT 文件中没有可验证的色彩空间元数据，因此导入 LUT 假定其输入和输出均为 sRGB。技术 LUT、HDR、RAW 和视频在后续阶段处理。
+Phase 5 使用线性 sRGB Core Image working space 和 sRGB SDR output。导入图像的方向会在读取时规范化；ImageIO 无法识别 profile 的标准照片会明确附着 sRGB。每个 LUT 都必须声明类型及输入/输出色彩空间：新导入 `.cube` 默认为未声明，不能被渲染，避免把未知 LUT 伪装成 sRGB。Technical LUT 在全局调整前以 100% 套用，Creative LUT 在其后按强度混合。详见 [color-management.md](docs/color-management.md)。
 
 导出保留可由 ImageIO 直接写回的源元数据；实际 Photos 权限、HEIF 编码、真机色彩/GPU 结果需要在真实设备验证。

@@ -142,7 +142,31 @@ Known Limitations:
 
 ## Phase 5
 
-Status: NOT_STARTED
+Status: COMPLETED
+
+Commit: recorded by the Phase 5 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 31 tests, 0 failures (includes all prior regression tests).
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Phase 5 Acceptance:
+
+- [PASS] Creative LUT 与 Technical LUT 通过持久化 `LUTKind` 分流；Technical LUT 在全局创意调整前以 100% 套用，Creative LUT 在其后按强度混合。
+- [PASS] `LUTColorMetadata` 持久化输入/输出色彩空间；新导入 LUT 不再猜测 sRGB，未声明 metadata 的 LUT 被拒绝渲染。
+- [PASS] sRGB、Display P3、Linear sRGB、Rec.709、Extended Linear sRGB 与 Rec.709 HLG 均有显式 descriptor，HDR 输入不会被默认为 sRGB。
+- [PASS] 长生命周期 `CIContext` 使用 linear sRGB working space 与 sRGB SDR output；Source → Working → Technical → Creative → Output 流程已经文档化。
+- [PASS] Technical identity LUT、metadata 编解码、未知 metadata 拒绝和既有 pipeline/export/batch/RAW 回归均自动覆盖。
+
+Manual Verification Required:
+
+- 在真机以已知 S-Log3 → Rec.709、HLG → Rec.709 LUT 与相机原始素材比对厂商参考结果。
+- 以 Display P3 源图检查 Preview、全分辨率 JPEG/HEIF sRGB export，并检查 Technical + Creative LUT 连用的视觉一致性。
+
+Known Limitations:
+
+- `.cube` 没有可靠的标准色彩空间 metadata；用户必须依据 LUT 作者资料标注其类型和输入/输出空间。
+- Phase 5 的输出仍是 SDR sRGB。Extended Linear/HLG 仅保留为可验证的描述符；真正的 HDR preview、tone mapping 与 HDR HEIF export 留待 Phase 6。
 
 ## Phase 6
 

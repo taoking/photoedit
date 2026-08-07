@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01AEBC88B8B27BB6D74FE6F4 /* ColorManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = E888947E33A2A9D08A294FA5 /* ColorManagement.swift */; };
 		01DF6202A2B3C9F65C7DA891 /* RAWStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */; };
 		02C911BA70490726C694869A /* EditState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66E993FB58BF014855131BC /* EditState.swift */; };
 		08564BA571D43E0BBF6E3D7C /* BatchWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047E2AEF50C15C172E2F023F /* BatchWorkflowTests.swift */; };
@@ -34,6 +35,7 @@
 		DD3C7BD568BEA21919B2F617 /* ImagePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4485F1963C17129A1731684D /* ImagePipelineTests.swift */; };
 		DF1AEE3F265024984D5E59A1 /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782C7F54CD612543B62468AE /* EditorViewModel.swift */; };
 		E771E7D2BC1B65713A2F0510 /* TestLUTFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165FC84A048BA7AC0120792A /* TestLUTFactory.swift */; };
+		F879A1DD6B8DDC573EF7C6C9 /* ColorManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,11 +72,13 @@
 		8706CA9D5A39A92A7EDAD53F /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8BEF67F7A9096F9B1E36C625 /* ToneCurveProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveProcessor.swift; sourceTree = "<group>"; };
 		A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUT.swift; sourceTree = "<group>"; };
+		C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagementTests.swift; sourceTree = "<group>"; };
 		C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAWImageSource.swift; sourceTree = "<group>"; };
 		CF61BBC4CB543268C98A760C /* ImageAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAsset.swift; sourceTree = "<group>"; };
 		E3FA3ACA8E090F59EF6AA225 /* PhotoEditApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoEditApp.swift; sourceTree = "<group>"; };
 		E4C1A9981C3314F85DB9D060 /* ImageExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageExporter.swift; sourceTree = "<group>"; };
 		E66E993FB58BF014855131BC /* EditState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditState.swift; sourceTree = "<group>"; };
+		E888947E33A2A9D08A294FA5 /* ColorManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagement.swift; sourceTree = "<group>"; };
 		F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipeline.swift; sourceTree = "<group>"; };
 		F7D991F48E455171230EDBD4 /* CUBEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CUBEParser.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -94,6 +98,7 @@
 			children = (
 				1DDFB7C02B46526D3CA01BC8 /* AdjustmentClipboardTests.swift */,
 				047E2AEF50C15C172E2F023F /* BatchWorkflowTests.swift */,
+				C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */,
 				0331CA37E856171BB2D3F821 /* CUBEParserTests.swift */,
 				602D6A07AAD8A96DF89F05A6 /* EditStateTests.swift */,
 				4485F1963C17129A1731684D /* ImagePipelineTests.swift */,
@@ -141,6 +146,7 @@
 		72CD5C755EFAF58A818A5311 /* Imaging */ = {
 			isa = PBXGroup;
 			children = (
+				E888947E33A2A9D08A294FA5 /* ColorManagement.swift */,
 				CF61BBC4CB543268C98A760C /* ImageAsset.swift */,
 				012F03CD15BE83115A217ACC /* ImageEditorError.swift */,
 				F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */,
@@ -297,6 +303,7 @@
 				5B70E4AD361BD7442C5B0420 /* AdjustmentClipboardTests.swift in Sources */,
 				08564BA571D43E0BBF6E3D7C /* BatchWorkflowTests.swift in Sources */,
 				6E44030B34AEA6B5F1A2BAEF /* CUBEParserTests.swift in Sources */,
+				F879A1DD6B8DDC573EF7C6C9 /* ColorManagementTests.swift in Sources */,
 				59E5BD08BB057AD3E2E70AD0 /* EditStateTests.swift in Sources */,
 				DD3C7BD568BEA21919B2F617 /* ImagePipelineTests.swift in Sources */,
 				A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */,
@@ -313,6 +320,7 @@
 				32708E3C2A2F9FDCF7633A5E /* AdjustmentClipboard.swift in Sources */,
 				551ADFA5FE159754FD033101 /* BatchExportQueue.swift in Sources */,
 				40CB29824E5C63DA1DF20135 /* CUBEParser.swift in Sources */,
+				01AEBC88B8B27BB6D74FE6F4 /* ColorManagement.swift in Sources */,
 				02C911BA70490726C694869A /* EditState.swift in Sources */,
 				94BEFB05A72C76CCBAD1B6DA /* EditorView.swift in Sources */,
 				DF1AEE3F265024984D5E59A1 /* EditorViewModel.swift in Sources */,
