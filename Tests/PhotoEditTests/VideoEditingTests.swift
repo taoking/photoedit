@@ -53,6 +53,31 @@ final class VideoEditingTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: output.fileURL.path))
     }
 
+    func testVideoExporterAppliesPortraitPreferredTransformExactlyOnce() async throws {
+        let portraitTransform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 40, ty: 0)
+        let inputURL = try await makeVideoFixture(width: 80, height: 40, transform: portraitTransform)
+        defer { try? FileManager.default.removeItem(at: inputURL) }
+        let asset = try await VideoAsset.importFromFile(url: inputURL)
+        defer { try? FileManager.default.removeItem(at: asset.sourceURL) }
+        XCTAssertEqual(asset.width, 80)
+        XCTAssertEqual(asset.height, 40)
+
+        let output = try await VideoExporter.export(asset: asset, state: .init(), lut: nil)
+        defer { try? FileManager.default.removeItem(at: output.fileURL) }
+        let rendered = AVURLAsset(url: output.fileURL)
+        let tracks = try await rendered.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(tracks.first)
+        let size = try await track.load(.naturalSize)
+        let transform = try await track.load(.preferredTransform)
+        let duration = try await rendered.load(.duration)
+        let display = displayedSize(size: size, transform: transform)
+
+        XCTAssertEqual(display.width, 40, accuracy: 0.01)
+        XCTAssertEqual(display.height, 80, accuracy: 0.01)
+        XCTAssertEqual(abs(size.width * size.height), 80 * 40, accuracy: 0.01)
+        XCTAssertEqual(duration.seconds, asset.durationSeconds, accuracy: 0.1)
+    }
+
     func testVideoExporterRejectsTechnicalLUTBeforeReadingSource() async {
         let technical = LUT(
             title: "Technical",
@@ -84,27 +109,32 @@ final class VideoEditingTests: XCTestCase {
         }
     }
 
-    private func makeVideoFixture() async throws -> URL {
+    private func makeVideoFixture(
+        width: Int = 64,
+        height: Int = 48,
+        transform: CGAffineTransform = .identity
+    ) async throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("mov")
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: 64,
-            AVVideoHeightKey: 48
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height
         ])
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: input,
             sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: 64,
-                kCVPixelBufferHeightKey as String: 48,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
                 kCVPixelBufferIOSurfacePropertiesKey as String: [:]
             ]
         )
         XCTAssertTrue(writer.canAdd(input))
         writer.add(input)
+        input.transform = transform
         XCTAssertTrue(writer.startWriting())
         writer.startSession(atSourceTime: .zero)
         for frame in 0 ..< 6 {
@@ -114,7 +144,7 @@ final class VideoEditingTests: XCTestCase {
             }
             var buffer: CVPixelBuffer?
             XCTAssertEqual(
-                CVPixelBufferCreate(kCFAllocatorDefault, 64, 48, kCVPixelFormatType_32BGRA, nil, &buffer),
+                CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA, nil, &buffer),
                 kCVReturnSuccess
             )
             guard let buffer else { throw FixtureError.pixelBufferCreationFailed }
@@ -131,6 +161,11 @@ final class VideoEditingTests: XCTestCase {
         await fulfillment(of: [completion], timeout: 10)
         guard writer.status == .completed else { throw writer.error ?? FixtureError.writerFailed }
         return url
+    }
+
+    private func displayedSize(size: CGSize, transform: CGAffineTransform) -> CGSize {
+        let rect = CGRect(origin: .zero, size: size).applying(transform).standardized
+        return CGSize(width: rect.width, height: rect.height)
     }
 
     private func pixelByteSum(_ image: CGImage) -> Int {

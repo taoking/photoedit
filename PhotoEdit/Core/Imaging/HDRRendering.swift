@@ -27,6 +27,9 @@ enum HDRRenderingError: LocalizedError, Sendable, Equatable {
     case hdrRequiresHDRSource
     case hdrEncodingUnavailable
     case toneMappingUnavailable
+    case hslUnavailableForHDR
+    case toneCurveUnavailableForHDR
+    case lutUnavailableForHDR
 
     var errorDescription: String? {
         switch self {
@@ -34,6 +37,9 @@ enum HDRRenderingError: LocalizedError, Sendable, Equatable {
         case .hdrRequiresHDRSource: "HDR 导出需要带 Extended Dynamic Range 或 HDR gain map 的源照片。"
         case .hdrEncodingUnavailable: "当前设备不支持 10-bit HEIF HDR 编码。"
         case .toneMappingUnavailable: "当前系统无法对 HDR 输入执行 SDR tone mapping。"
+        case .hslUnavailableForHDR: "HDR 照片的 HSL 目前已禁用，以避免 SDR HSL 算法裁切高光。"
+        case .toneCurveUnavailableForHDR: "HDR 照片的曲线目前已禁用，以避免 Color Cube 裁切高光。"
+        case .lutUnavailableForHDR: "HDR 照片的 Technical/Creative LUT 目前已禁用，以避免 Color Cube 裁切高光。"
         }
     }
 }

@@ -97,8 +97,73 @@ final class HDRRenderingTests: XCTestCase {
         XCTAssertNotNil(CGImageSourceCreateWithData(output.data as CFData, nil))
     }
 
+    func testExtendedRangeIdentityHSLAndCurvePreserveHeadroom() async throws {
+        let source = CIImage(color: CIColor(red: 2, green: 1.5, blue: 1.2, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 16, height: 16))
+        let pipeline = ImagePipeline()
+        let output = try await pipeline.render(
+            image: source,
+            state: .initial,
+            lut: nil,
+            sourceColorSpace: .rec2100HLG,
+            sourceHeadroom: 2,
+            dynamicRange: .hdr,
+            mode: .preview(maximumDimension: 16)
+        )
+        XCTAssertGreaterThan(halfFloatPixel(output, component: 0), 1)
+        XCTAssertGreaterThan(halfFloatPixel(output, component: 1), 1)
+        XCTAssertGreaterThan(halfFloatPixel(output, component: 2), 1)
+    }
+
+    func testHDRRejectsHSLCurveAndLUTInsteadOfClippingHighlights() async throws {
+        let source = CIImage(color: CIColor(red: 2, green: 1.5, blue: 1.2, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 16, height: 16))
+        let pipeline = ImagePipeline()
+
+        var hsl = EditState()
+        hsl.hsl.red.saturation = -10
+        await assertHDRFailure(.hslUnavailableForHDR) {
+            try await pipeline.render(image: source, state: hsl, lut: nil, sourceColorSpace: .rec2100HLG, sourceHeadroom: 2, dynamicRange: .hdr, mode: .preview(maximumDimension: 16))
+        }
+
+        var curves = EditState()
+        var red = curves.curves.red
+        red.movePoint(id: "end", x: 1, y: 0.8)
+        curves.curves.red = red
+        await assertHDRFailure(.toneCurveUnavailableForHDR) {
+            try await pipeline.render(image: source, state: curves, lut: nil, sourceColorSpace: .rec2100HLG, sourceHeadroom: 2, dynamicRange: .hdr, mode: .preview(maximumDimension: 16))
+        }
+
+        await assertHDRFailure(.lutUnavailableForHDR) {
+            try await pipeline.render(image: source, state: .initial, lut: TestLUTFactory.identityLUT(), sourceColorSpace: .rec2100HLG, sourceHeadroom: 2, dynamicRange: .hdr, mode: .preview(maximumDimension: 16))
+        }
+    }
+
     private func pixelByteSum(_ image: CGImage) -> Int {
         guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
         return Array(UnsafeBufferPointer(start: bytes, count: CFDataGetLength(data))).reduce(0) { $0 + Int($1) }
+    }
+
+    private func halfFloatPixel(_ image: CGImage, component: Int) -> Float {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
+        let offset = component * MemoryLayout<UInt16>.size
+        let bits = UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
+        return Float(Float16(bitPattern: bits))
+    }
+
+    private func assertHDRFailure(
+        _ expected: HDRRenderingError,
+        expression: @escaping () async throws -> CGImage,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            _ = try await expression()
+            XCTFail("Expected HDR rejection", file: file, line: line)
+        } catch let error as HDRRenderingError {
+            XCTAssertEqual(error, expected, file: file, line: line)
+        } catch {
+            XCTFail("Unexpected error: \(error)", file: file, line: line)
+        }
     }
 }

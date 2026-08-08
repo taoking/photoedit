@@ -4,6 +4,8 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
+/// `CIImage`、Data 与 metadata 在安装后都不再变更；此值只跨任务传递不可变输入，
+/// 真正的 CIContext 渲染仍由 ImagePipeline actor 串行管理。
 struct ImageAsset: @unchecked Sendable {
     let id: UUID
     let sourceName: String

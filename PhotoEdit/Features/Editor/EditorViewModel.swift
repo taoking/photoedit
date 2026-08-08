@@ -37,6 +37,8 @@ final class EditorViewModel: ObservableObject {
     private var histogramTask: Task<Void, Never>?
     private var referenceTask: Task<Void, Never>?
     private var renderGeneration = 0
+    private var loadGeneration = 0
+    private var loadTask: Task<Void, Never>?
     private var undoStack: [EditState] = []
     private var pendingContinuousUndo: EditState?
 
@@ -56,6 +58,7 @@ final class EditorViewModel: ObservableObject {
 
     deinit {
         renderTask?.cancel()
+        loadTask?.cancel()
         exportTask?.cancel()
         batchTask?.cancel()
         histogramTask?.cancel()
@@ -75,35 +78,37 @@ final class EditorViewModel: ObservableObject {
     }
 
     func loadImage(data: Data, sourceName: String) {
-        cancelRender()
+        let generation = beginLoading()
         errorMessage = nil
-        isRendering = true
-        Task { [weak self] in
+        loadTask = Task { [weak self] in
             do {
                 let loaded = try await Task.detached(priority: .userInitiated) {
                     try ImageLoader.load(data: data, sourceName: sourceName)
                 }.value
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self?.loadGeneration == generation else { return }
                 self?.install(asset: loaded)
+            } catch is CancellationError {
+                self?.finishLoadingCancellation(generation: generation)
             } catch {
-                self?.finishLoadingWithError(error)
+                self?.finishLoadingWithError(error, generation: generation)
             }
         }
     }
 
     func loadImage(url: URL) {
-        cancelRender()
+        let generation = beginLoading()
         errorMessage = nil
-        isRendering = true
-        Task { [weak self] in
+        loadTask = Task { [weak self] in
             do {
                 let loaded = try await Task.detached(priority: .userInitiated) {
                     try ImageLoader.load(url: url)
                 }.value
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self?.loadGeneration == generation else { return }
                 self?.install(asset: loaded)
+            } catch is CancellationError {
+                self?.finishLoadingCancellation(generation: generation)
             } catch {
-                self?.finishLoadingWithError(error)
+                self?.finishLoadingWithError(error, generation: generation)
             }
         }
     }
@@ -312,11 +317,12 @@ final class EditorViewModel: ObservableObject {
     func thumbnail(for id: UUID) -> CGImage? {
         if let cached = lutPreviewCache[id] { return cached }
         guard let asset else { return nil }
+        guard lutPreviewCache.beginRequest(for: id) else { return nil }
         let thumbnailState = state
         Task { [weak self, pipeline, asset, thumbnailState] in
-            guard let self,
-                  let lut = try? self.lutRepository.lut(for: id),
-                  lut.kind == .creative else { return }
+            guard let self else { return }
+            defer { self.lutPreviewCache.finishRequest(for: id) }
+            guard let lut = try? self.lutRepository.lut(for: id), lut.kind == .creative else { return }
             var renderState = thumbnailState
             renderState.lut.selectedLUTID = id
             renderState.lut.intensity = 1
@@ -493,11 +499,24 @@ final class EditorViewModel: ObservableObject {
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
         renderOriginalPreview()
-        scheduleHistogram()
         schedulePreviewRender()
     }
 
-    private func finishLoadingWithError(_ error: Error) {
+    private func beginLoading() -> Int {
+        loadTask?.cancel()
+        cancelRender()
+        loadGeneration += 1
+        isRendering = true
+        return loadGeneration
+    }
+
+    private func finishLoadingCancellation(generation: Int) {
+        guard loadGeneration == generation else { return }
+        isRendering = false
+    }
+
+    private func finishLoadingWithError(_ error: Error, generation: Int) {
+        guard loadGeneration == generation else { return }
         isRendering = false
         present(error)
     }
@@ -535,6 +554,7 @@ final class EditorViewModel: ObservableObject {
             return
         }
         renderTask?.cancel()
+        histogramTask?.cancel()
         renderGeneration += 1
         let generation = renderGeneration
         let state = state
@@ -553,6 +573,7 @@ final class EditorViewModel: ObservableObject {
                 guard !Task.isCancelled, self?.renderGeneration == generation else { return }
                 self?.previewImage = rendered
                 self?.isRendering = false
+                self?.scheduleHistogram(for: rendered, assetID: asset.id, renderGeneration: generation)
             } catch is CancellationError {
                 // Newer render owns UI state.
             } catch {
@@ -568,18 +589,15 @@ final class EditorViewModel: ObservableObject {
         renderGeneration += 1
     }
 
-    private func scheduleHistogram() {
+    private func scheduleHistogram(for preview: CGImage, assetID: UUID, renderGeneration: Int) {
         histogramTask?.cancel()
-        guard let asset else {
-            histogram = .empty
-            return
-        }
-        let id = asset.id
-        histogramTask = Task { [weak self, pipeline, asset] in
+        histogramTask = Task { [weak self, pipeline] in
             do {
                 try await Task.sleep(nanoseconds: 160_000_000)
-                let computed = try await pipeline.histogram(for: asset, maximumDimension: 512)
-                guard !Task.isCancelled, self?.asset?.id == id else { return }
+                let computed = try await pipeline.histogram(for: preview)
+                guard !Task.isCancelled,
+                      self?.asset?.id == assetID,
+                      self?.renderGeneration == renderGeneration else { return }
                 self?.histogram = computed
             } catch is CancellationError {
                 // Replaced by a newly loaded image.

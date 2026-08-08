@@ -45,7 +45,9 @@ struct EditState: Codable, Equatable, Sendable {
 
 struct RAWAdjustments: Codable, Equatable, Sendable {
     var exposure: Double = 0
+    /// 相对 RAW decoder / as-shot 白平衡的温度增量；0 必须保持 decoder 默认值。
     var temperature: Double = 0
+    /// 相对 RAW decoder / as-shot 白平衡的 tint 增量；0 必须保持 decoder 默认值。
     var tint: Double = 0
     var luminanceNoiseReduction: Double = 0
     var colorNoiseReduction: Double = 0
@@ -53,6 +55,25 @@ struct RAWAdjustments: Codable, Equatable, Sendable {
     var detail: Double = 0
     var localTone: Double = 0
     var lensCorrectionEnabled = true
+
+    var whiteBalanceAdjustment: RAWWhiteBalanceAdjustment {
+        RAWWhiteBalanceAdjustment(temperatureDelta: temperature, tintDelta: tint)
+    }
+}
+
+/// RAW 白平衡保存用户相对于解码器 as-shot 默认值的增量，而不是固定的绝对白点。
+struct RAWWhiteBalanceAdjustment: Codable, Equatable, Sendable {
+    var temperatureDelta: Double = 0
+    var tintDelta: Double = 0
+
+    var isIdentity: Bool { temperatureDelta == 0 && tintDelta == 0 }
+
+    func resolved(decoderTemperature: Float, decoderTint: Float) -> (temperature: Float, tint: Float) {
+        (
+            Float((Double(decoderTemperature) + temperatureDelta * 20).clamped(to: 2_000...50_000)),
+            Float((Double(decoderTint) + tintDelta).clamped(to: -150...150))
+        )
+    }
 }
 
 struct LightAdjustments: Codable, Equatable, Sendable {

@@ -52,4 +52,15 @@ final class CUBEParserTests: XCTestCase {
             XCTAssertEqual(error as? CUBEParserError, .unsupportedFormat)
         }
     }
+
+    func testRejectsAnInvertedDomain() {
+        let text = """
+        LUT_3D_SIZE 17
+        DOMAIN_MIN 1 0 0
+        DOMAIN_MAX 0 1 1
+        """
+        XCTAssertThrowsError(try CUBEParser.parse(text: text)) { error in
+            XCTAssertEqual(error as? CUBEParserError, .invalidDomain)
+        }
+    }
 }

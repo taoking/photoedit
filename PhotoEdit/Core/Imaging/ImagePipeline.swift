@@ -118,8 +118,13 @@ actor ImagePipeline {
             dynamicRange: .hdr,
             mode: .export(maximumDimension: settings.maximumDimension)
         )
-        var metadata = asset.metadata
-        if !settings.keepLocation { metadata.removeValue(forKey: kCGImagePropertyGPSDictionary) }
+        let extent = rendered.extent.integral
+        let metadata = ExportMetadataSanitizer.sanitized(
+            asset.metadata,
+            pixelWidth: Int(extent.width),
+            pixelHeight: Int(extent.height),
+            keepLocation: settings.keepLocation
+        )
         let properties = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key as String, $0.value) })
         let imageWithMetadata = rendered.settingProperties(properties)
         let options: [CIImageRepresentationOption: Any] = [
@@ -147,6 +152,15 @@ actor ImagePipeline {
         mode: RenderMode
     ) throws -> CIImage {
         try Task.checkCancellation()
+        if dynamicRange == .hdr {
+            // 当前 HSL 与 64³ Color Cube 都以 0...1 为采样域。与其在 HDR 中静默把
+            // >1 headroom 压到 SDR，不如在完整 extended-range 实现可用前明确拒绝。
+            if !state.hsl.isIdentity { throw HDRRenderingError.hslUnavailableForHDR }
+            if !state.curves.isIdentity { throw HDRRenderingError.toneCurveUnavailableForHDR }
+            if technicalLUT != nil || (lut != nil && state.lut.intensity > 0) {
+                throw HDRRenderingError.lutUnavailableForHDR
+            }
+        }
         _ = try colorRenderPlan(source: sourceColorSpace, technicalLUT: technicalLUT, creativeLUT: lut)
         // CIContext 的工作/输出色彩空间负责系统级的图像色彩匹配。不要在图像图中
         // 再叠加 `matchedToWorkingSpace`：对无 ICC profile 的 CIImage 该 API 会生成黑帧。
@@ -204,6 +218,19 @@ actor ImagePipeline {
             guard technicalLUT.colorMetadata.isComplete else {
                 throw ColorManagementError.invalidTechnicalLUT(name: technicalLUT.title ?? "未命名 LUT")
             }
+            guard technicalLUT.colorMetadata.isImplementedByPhotoPipeline else {
+                throw ColorManagementError.unsupportedLUTEncoding(name: technicalLUT.title ?? "未命名 LUT")
+            }
+            guard let expected = technicalLUT.colorMetadata.inputColorSpace else {
+                throw ColorManagementError.invalidTechnicalLUT(name: technicalLUT.title ?? "未命名 LUT")
+            }
+            guard expected == source else {
+                throw ColorManagementError.incompatibleTechnicalLUT(
+                    name: technicalLUT.title ?? "未命名 LUT",
+                    source: source,
+                    expected: expected
+                )
+            }
         }
         if let creativeLUT {
             guard creativeLUT.kind == .creative else {
@@ -211,6 +238,9 @@ actor ImagePipeline {
             }
             guard creativeLUT.colorMetadata.isComplete else {
                 throw ColorManagementError.missingLUTMetadata(name: creativeLUT.title ?? "未命名 LUT")
+            }
+            guard creativeLUT.colorMetadata.isImplementedByPhotoPipeline else {
+                throw ColorManagementError.unsupportedLUTEncoding(name: creativeLUT.title ?? "未命名 LUT")
             }
         }
         return ColorRenderPlan(
@@ -247,8 +277,15 @@ actor ImagePipeline {
     /// 直方图只读取下采样 Preview Source；不参与 Slider 的全分辨率渲染路径。
     func histogram(for source: CIImage, maximumDimension: Int = 512) throws -> Histogram {
         let image = downsample(normalizedExtent(source), maximumDimension: maximumDimension)
-        guard let cgImage = context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: workingColorSpace),
-              let data = cgImage.dataProvider?.data,
+        guard let cgImage = context.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: workingColorSpace) else {
+            throw ImageEditorError.renderFailed
+        }
+        return try histogram(for: cgImage)
+    }
+
+    /// 编辑完成的 preview 已经是低分辨率结果；从它取样避免为 Histogram 再跑一次图像链。
+    func histogram(for cgImage: CGImage) throws -> Histogram {
+        guard let data = cgImage.dataProvider?.data,
               let bytes = CFDataGetBytePtr(data) else {
             throw ImageEditorError.renderFailed
         }
@@ -318,7 +355,7 @@ actor ImagePipeline {
     }
 
     private func applyTechnicalLUT(_ lut: LUT, to image: CIImage) throws -> CIImage {
-        guard lut.colorMetadata.inputColorSpace != nil, lut.colorMetadata.outputColorSpace != nil else {
+        guard lut.colorMetadata.isImplementedByPhotoPipeline else {
             throw ColorManagementError.invalidTechnicalLUT(name: lut.title ?? "未命名 LUT")
         }
         return try LUTProcessor.apply(lut, to: image)
@@ -326,8 +363,7 @@ actor ImagePipeline {
 
     private func applyCreativeLUT(_ lut: LUT, to image: CIImage) throws -> CIImage {
         guard lut.kind == .creative,
-              lut.colorMetadata.inputColorSpace != nil,
-              lut.colorMetadata.outputColorSpace != nil else {
+              lut.colorMetadata.isImplementedByPhotoPipeline else {
             throw ColorManagementError.missingLUTMetadata(name: lut.title ?? "未命名 LUT")
         }
         return try LUTProcessor.apply(lut, to: image)

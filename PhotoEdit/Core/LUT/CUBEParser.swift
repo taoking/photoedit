@@ -5,6 +5,7 @@ enum CUBEParserError: LocalizedError, Equatable {
     case unsupportedDimension(Int)
     case invalidDirective(line: Int)
     case invalidValue(line: Int)
+    case invalidDomain
     case incorrectValueCount(expected: Int, actual: Int)
     case unsupportedFormat
 
@@ -18,6 +19,8 @@ enum CUBEParserError: LocalizedError, Equatable {
             "第 \(line) 行的 LUT 指令无效。"
         case let .invalidValue(line):
             "第 \(line) 行的 RGB 数值无效。"
+        case .invalidDomain:
+            "LUT 的 DOMAIN_MAX 必须在每个通道都大于 DOMAIN_MIN。"
         case let .incorrectValueCount(expected, actual):
             "LUT 应有 \(expected) 个颜色值，实际有 \(actual) 个。"
         case .unsupportedFormat:
@@ -77,6 +80,11 @@ enum CUBEParser {
         }
 
         guard let dimension else { throw CUBEParserError.missingDimension }
+        guard domainMax.red > domainMin.red,
+              domainMax.green > domainMin.green,
+              domainMax.blue > domainMin.blue else {
+            throw CUBEParserError.invalidDomain
+        }
         let expected = dimension * dimension * dimension
         guard values.count == expected else {
             throw CUBEParserError.incorrectValueCount(expected: expected, actual: values.count)

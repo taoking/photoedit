@@ -18,7 +18,8 @@ struct CameraMetadata: Codable, Equatable, Sendable {
     var captureDate: Date?
 }
 
-/// RAW bytes 保持不可变；每一次 preview/export 都新建 CIRAWFilter，保证 Export 不会复用低质量 draft decode。
+/// RAW bytes 保持不可变（与 ImageAsset 的 Data 使用 copy-on-write backing）；每一次
+/// preview/export 都新建 CIRAWFilter，保证 Export 不会复用低质量 draft decode。
 struct RAWImageSource: @unchecked Sendable {
     let data: Data
     let identifierHint: String?
@@ -40,8 +41,17 @@ struct RAWImageSource: @unchecked Sendable {
             filter.scaleFactor = 1
         }
         filter.exposure = Float(adjustments.exposure.clamped(to: -5...5))
-        filter.neutralTemperature = Float((6500 + adjustments.temperature * 20).clamped(to: 2000...50000))
-        filter.neutralTint = Float(adjustments.tint.clamped(to: -150...150))
+        // CIRAWFilter 在创建时已带入相机的 as-shot / decoder 白平衡。仅当用户确实
+        // 修改了任一增量时才写回属性，避免 RAW 默认状态被错误重置到 6500 K / 0 tint。
+        let whiteBalance = adjustments.whiteBalanceAdjustment
+        if !whiteBalance.isIdentity {
+            let resolved = whiteBalance.resolved(
+                decoderTemperature: filter.neutralTemperature,
+                decoderTint: filter.neutralTint
+            )
+            filter.neutralTemperature = resolved.temperature
+            filter.neutralTint = resolved.tint
+        }
         if filter.isLuminanceNoiseReductionSupported { filter.luminanceNoiseReductionAmount = Float(adjustments.luminanceNoiseReduction.clamped(to: 0...1)) }
         if filter.isColorNoiseReductionSupported { filter.colorNoiseReductionAmount = Float(adjustments.colorNoiseReduction.clamped(to: 0...1)) }
         if filter.isSharpnessSupported { filter.sharpnessAmount = Float(adjustments.sharpness.clamped(to: 0...1)) }
@@ -55,8 +65,6 @@ struct RAWImageSource: @unchecked Sendable {
     static func metadata(from properties: [CFString: Any]) -> CameraMetadata {
         let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
-        let dateFormatter = ISO8601DateFormatter()
-        let dateText = exif?[kCGImagePropertyExifDateTimeOriginal] as? String
         return CameraMetadata(
             camera: tiff?[kCGImagePropertyTIFFModel] as? String,
             lens: exif?[kCGImagePropertyExifLensModel] as? String,
@@ -64,7 +72,21 @@ struct RAWImageSource: @unchecked Sendable {
             shutterSeconds: (exif?[kCGImagePropertyExifExposureTime] as? NSNumber)?.doubleValue,
             iso: (exif?[kCGImagePropertyExifISOSpeedRatings] as? [NSNumber])?.first?.doubleValue,
             focalLength: (exif?[kCGImagePropertyExifFocalLength] as? NSNumber)?.doubleValue,
-            captureDate: dateText.flatMap { dateFormatter.date(from: $0.replacingOccurrences(of: " ", with: "T")) }
+            captureDate: captureDate(exif: exif, tiff: tiff)
         )
+    }
+
+    /// EXIF/TIFF 日期为 `yyyy:MM:dd HH:mm:ss`，不是 ISO 8601。缺少时区时使用
+    /// 系统本地时区解释墙上时间，绝不伪造成 UTC。
+    static func captureDate(exif: [CFString: Any]?, tiff: [CFString: Any]?) -> Date? {
+        let dateText = (exif?[kCGImagePropertyExifDateTimeOriginal] as? String)
+            ?? (tiff?[kCGImagePropertyTIFFDateTime] as? String)
+        guard let dateText else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        formatter.isLenient = false
+        return formatter.date(from: dateText)
     }
 }

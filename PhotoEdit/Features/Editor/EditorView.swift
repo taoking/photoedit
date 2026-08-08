@@ -498,24 +498,33 @@ private struct HSLPanel: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Color Mixer").font(.headline)
-                    Spacer()
-                    Button("重置 \(channel.title)") { model.resetHSL(channel) }
-                    Button("重置全部") { model.resetAllHSL() }
+            if model.usesHDRPreview {
+                ContentUnavailableView(
+                    "HDR 暂不支持 HSL",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("当前 HSL 算法只适用于 SDR 0…1 范围。为保留 HDR 高光，已禁用而非静默裁切。")
+                )
+                .padding()
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Color Mixer").font(.headline)
+                        Spacer()
+                        Button("重置 \(channel.title)") { model.resetHSL(channel) }
+                        Button("重置全部") { model.resetAllHSL() }
+                    }
+                    Picker("颜色", selection: $channel) {
+                        ForEach(HSLChannel.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    hslSlider("色相", keyPath: \.hue)
+                    hslSlider("饱和度", keyPath: \.saturation)
+                    hslSlider("明度", keyPath: \.luminance)
+                    Text("所有参数均保存在 EditState；色相选择以软边界覆盖相邻颜色。")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Picker("颜色", selection: $channel) {
-                    ForEach(HSLChannel.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                hslSlider("色相", keyPath: \.hue)
-                hslSlider("饱和度", keyPath: \.saturation)
-                hslSlider("明度", keyPath: \.luminance)
-                Text("所有参数均保存在 EditState；色相选择以软边界覆盖相邻颜色。")
-                    .font(.caption).foregroundStyle(.secondary)
+                .padding()
             }
-            .padding()
         }
     }
 
@@ -549,15 +558,15 @@ private struct RAWPanel: View {
                     Text("RAW Decode").font(.headline)
                     MetadataGrid(metadata: metadata)
                     rawSlider("RAW 曝光", keyPath: \.exposure, range: -5...5)
-                    rawSlider("RAW 色温", keyPath: \.temperature, range: -100...100)
-                    rawSlider("RAW 色调", keyPath: \.tint, range: -100...100)
+                    rawSlider("RAW 色温增量", keyPath: \.temperature, range: -100...100)
+                    rawSlider("RAW 色调增量", keyPath: \.tint, range: -100...100)
                     rawSlider("明度降噪", keyPath: \.luminanceNoiseReduction, range: 0...1)
                     rawSlider("色彩降噪", keyPath: \.colorNoiseReduction, range: 0...1)
                     rawSlider("RAW 锐化", keyPath: \.sharpness, range: 0...1)
                     rawSlider("细节", keyPath: \.detail, range: 0...3)
                     rawSlider("局部色调", keyPath: \.localTone, range: 0...1)
                     Toggle("镜头校正", isOn: Binding(get: { model.state.raw?.lensCorrectionEnabled ?? false }, set: { value in model.update { $0.raw?.lensCorrectionEnabled = value } }))
-                    Text("Preview 先使用 CIRAWFilter draft decode；导出重新以全分辨率 RAW decode。")
+                    Text("零色温/色调增量保留相机 as-shot 白平衡。Preview 先使用 CIRAWFilter draft decode；导出重新以全分辨率 RAW decode。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding()
@@ -603,7 +612,15 @@ private struct ToneCurvePanel: View {
     private var curve: ToneCurve { model.state.curves[channel] }
 
     var body: some View {
-        VStack(spacing: 10) {
+        if model.usesHDRPreview {
+            ContentUnavailableView(
+                "HDR 暂不支持曲线",
+                systemImage: "exclamationmark.triangle",
+                description: Text("当前 64³ Color Cube 曲线只适用于 SDR 0…1 范围。为保留 HDR 高光，已禁用而非静默裁切。")
+            )
+            .padding()
+        } else {
+            VStack(spacing: 10) {
             HStack {
                 Picker("通道", selection: $channel) {
                     ForEach(ToneCurveChannel.allCases) { Text($0.title).tag($0) }
@@ -661,6 +678,7 @@ private struct ToneCurvePanel: View {
                 Spacer()
             }
             .padding([.horizontal, .bottom])
+            }
         }
     }
 
@@ -713,6 +731,13 @@ private struct PresetPanel: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if model.usesHDRPreview {
+                Text("HDR 照片的 LUT 已暂时禁用：当前 Color Cube 不能保证保留 >1 的高光 headroom。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
+
             HStack {
                 Button("新建预设", systemImage: "plus") { showingCreator = true }
                 Button("导入", systemImage: "square.and.arrow.down") { showingImporter = true }
@@ -843,7 +868,7 @@ private struct LUTPanel: View {
                     .monospacedDigit().foregroundStyle(.secondary)
             }
             .padding(.horizontal)
-            .disabled(model.state.lut.selectedLUTID == nil)
+            .disabled(model.usesHDRPreview || model.state.lut.selectedLUTID == nil)
 
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
@@ -873,6 +898,7 @@ private struct LUTPanel: View {
                 }
                 .padding(.horizontal)
             }
+            .disabled(model.usesHDRPreview)
             if technicalItems.isEmpty {
                 Text("Technical LUT 会先完成 Log/HLG 等输入到工作空间的变换，且不参与强度混合。")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
@@ -888,6 +914,7 @@ private struct LUTPanel: View {
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal)
+                .disabled(model.usesHDRPreview)
                 if let item = technicalItems.first(where: { $0.id == model.state.lut.technicalLUTID }) {
                     Menu("配置 \(item.name)") { colorConfigurationMenu(for: item) }
                         .padding(.horizontal)

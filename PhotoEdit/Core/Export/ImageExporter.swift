@@ -62,11 +62,45 @@ struct ExportSettings: Codable, Equatable, Sendable {
     }
 }
 
+/// Data 与临时 URL 在创建后不会被本值修改；跨任务只传递导出结果的不可变快照。
 struct ExportedImage: @unchecked Sendable {
     let data: Data
     let fileURL: URL
     let type: UTType
     let filename: String
+}
+
+/// 渲染已经将所有方向、裁切和旋转烘焙进像素。保留源 metadata 时必须同步更新
+/// 几何字段，否则照片库或其他读取器可能再次旋转，或显示已失真的像素尺寸。
+enum ExportMetadataSanitizer {
+    static func sanitized(
+        _ source: [CFString: Any],
+        pixelWidth: Int,
+        pixelHeight: Int,
+        keepLocation: Bool
+    ) -> [CFString: Any] {
+        var metadata = source
+        metadata[kCGImagePropertyOrientation] = 1
+        metadata[kCGImagePropertyPixelWidth] = pixelWidth
+        metadata[kCGImagePropertyPixelHeight] = pixelHeight
+
+        var exif = (metadata[kCGImagePropertyExifDictionary] as? [CFString: Any]) ?? [:]
+        exif[kCGImagePropertyExifPixelXDimension] = pixelWidth
+        exif[kCGImagePropertyExifPixelYDimension] = pixelHeight
+        metadata[kCGImagePropertyExifDictionary] = exif
+
+        var tiff = (metadata[kCGImagePropertyTIFFDictionary] as? [CFString: Any]) ?? [:]
+        tiff[kCGImagePropertyTIFFOrientation] = 1
+        metadata[kCGImagePropertyTIFFDictionary] = tiff
+
+        // 缩略图可能持有旧的方向和分辨率；让目标容器按最终像素重新生成，而非遗留
+        // 一个与导出图不一致的 embedded thumbnail。
+        metadata.removeValue(forKey: kCGImagePropertyThumbnailImages)
+        if !keepLocation {
+            metadata.removeValue(forKey: kCGImagePropertyGPSDictionary)
+        }
+        return metadata
+    }
 }
 
 enum ImageExporter {
@@ -120,10 +154,12 @@ enum ImageExporter {
         guard let destination = CGImageDestinationCreateWithData(data, settings.format.utType.identifier as CFString, 1, nil) else {
             throw ImageEditorError.exportFailed
         }
-        var metadata = asset.metadata
-        if !settings.keepLocation {
-            metadata.removeValue(forKey: kCGImagePropertyGPSDictionary)
-        }
+        var metadata = ExportMetadataSanitizer.sanitized(
+            asset.metadata,
+            pixelWidth: image.width,
+            pixelHeight: image.height,
+            keepLocation: settings.keepLocation
+        )
         metadata[kCGImageDestinationLossyCompressionQuality] = settings.jpegQuality.clamped(to: 0.8...1)
         CGImageDestinationAddImage(destination, image, metadata as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw ImageEditorError.exportFailed }

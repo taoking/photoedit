@@ -7,7 +7,7 @@ Phase 6 keeps the existing SDR behavior as the default. The source is loaded wit
 ```text
 HDR source / HDR gain map
 → Extended Linear sRGB + RGBA half-float Core Image working space
-→ Technical LUT → adjustments → Creative LUT → transform/crop
+→ safe global adjustments / local masks → transform/crop
 → HDR preview (RGBA half-float, UIImageView preferred dynamic range: high)
 → 10-bit HEIF in Rec.2100 HLG
 
@@ -16,7 +16,7 @@ the same edited HDR source
 → sRGB RGBA8 preview or JPEG/HEIF SDR export
 ```
 
-The source-to-working and working-to-output conversions remain Core Image responsibilities. Technical and Creative LUT ordering is unchanged from Phase 5.
+The source-to-working and working-to-output conversions remain Core Image responsibilities. Phase 8.5 verified that the existing eight-channel HSL kernel and 64³ Color Cube implementations assume an SDR 0…1 domain. Therefore HDR HSL, tone curves, Technical LUTs and Creative LUTs are currently disabled in both UI and render pipeline; a request fails explicitly instead of clipping `RGB > 1`. Identity HSL/curve paths preserve half-float headroom by bypassing those processors.
 
 ## Export behavior
 
@@ -34,6 +34,6 @@ The editor's primary and original previews request `UIImageView.preferredImageDy
 Manual verification required:
 
 - Import an iPhone HDR HEIF (including a gain-map asset) and an HLG camera file on an EDR-capable iPhone; compare the preview's highlight detail against Photos.
-- Export both SDR and HDR versions after exposure, HSL, curves and a Technical LUT. Inspect the SDR file on a conventional display for roll-off and the HDR HEIF on an HDR-capable device for retained highlights.
+- Export SDR and HDR versions after the currently supported global adjustments and local masks. Inspect the SDR file on a conventional display for roll-off and the HDR HEIF on an HDR-capable device for retained highlights. HSL, curves and LUT are expected to be unavailable for HDR until their extended-range implementations are added and validated.
 - Use the Photos save/share/files flows for the generated HDR HEIF, and verify GPS removal with the privacy switch disabled.
 - Measure preview and export memory/latency on 12MP, 24MP and 48MP HDR camera assets. The repository has no redistributable real HDR fixture, so that hardware validation remains manual.

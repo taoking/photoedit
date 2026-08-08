@@ -1,5 +1,41 @@
 # Development Progress
 
+## Phase 8.5 — Correctness & Real-world Validation
+
+Status: COMPLETED (AUTOMATED)
+
+Commit: recorded by the Phase 8.5 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 58 tests, 0 failures.
+
+Build: PASS — `xcodegen generate` 后，iPhone 17 Pro、iOS 26.5 Simulator 的独立 `xcodebuild ... build` 成功；安装和启动冒烟检查成功。
+
+Phase 8.5 Acceptance:
+
+- [PASS] RAW 零 temperature/tint 改为相对 CIRAWFilter decoder/as-shot 白平衡的零增量；旧 `EditState` JSON 无 schema 破坏。
+- [PASS] EXIF `DateTimeOriginal` 使用 `yyyy:MM:dd HH:mm:ss` + `en_US_POSIX` 解析，并以 TIFF DateTime fallback；缺少时区时不伪造 UTC。
+- [PASS] HDR synthetic `RGB > 1` identity HSL/curve 路径保留 half-float headroom；非 identity HSL、曲线和 Technical/Creative Color Cube LUT 被 UI 与 render pipeline 明确拒绝，避免静默 SDR 裁切。
+- [PASS] LUT metadata 额外建模 primaries/gamut 与 transfer function；Technical LUT 必须和实际 source encoding 精确匹配。S-Log3/S-Gamut3(.Cine)、LogC、PQ 等未实现 encoding 会安全拒绝。
+- [PASS] `.cube DOMAIN_MIN/MAX` 在进入 Color Cube 前逐通道归一化；反向/零宽 domain 被拒绝。
+- [PASS] 导出 metadata 强制 Orientation=1、正确根/EXIF/TIFF 像素尺寸、移除陈旧 thumbnail，并回归验证 crop/rotate/resize/GPS remove。
+- [PASS] Histogram 从最后成功的 edited preview 节流计算，不重复渲染 source；正曝光回归验证其向亮部移动。
+- [PASS] Brush mask 改为按 Preview/Export 尺寸栅格化的 alpha bitmap cache，不再构建最多 512 个 CI radial filter 节点；归一化 Preview/Export 对齐测试通过。
+- [PASS] 视频新增 80×40、90° preferredTransform fixture，导出 display geometry 为 40×80、时长正确且无 double rotate。iOS 26 使用新 API；iOS 17–25 的旧 API 仅保留在隔离兼容层。
+- [PASS] `SWIFT_STRICT_CONCURRENCY` 从 `minimal` 提升到 `targeted`；增加最后导入请求获胜和 LUT thumbnail in-flight 去重回归。
+
+Manual Verification Required:
+
+- 按 [real-world-validation.md](real-world-validation.md) 在 Sony A7C II ARW/DNG、iPhone HDR HEIF/gain-map、Display P3、带方向 metadata 的 H.264/HEVC 与 4K/含音频视频上验收。
+- 重点检查 RAW as-shot 白平衡、真实 HDR highlight、metadata、长笔画内存、视频音画同步与 4K 导出性能；真实媒体不纳入仓库。
+
+Known Limitations:
+
+- 当前 HDR 照片明确不支持 HSL、曲线及所有 LUT；这是正确性保护而非功能故障，待 extended-range 实现和真实设备验证后才可恢复。
+- S-Log3/S-Gamut3(.Cine)、LogC、PQ、Dolby Vision 及 HDR video 仍不支持，不能被 metadata/文件名猜测为 sRGB。
+- Xcode 仍会输出无 AppIntents dependency 的非操作性 metadata-extraction warning；没有新的 compiler/concurrency/Core Image actionable warning。
+
+---
+
 ## Phase 1
 
 Status: COMPLETED

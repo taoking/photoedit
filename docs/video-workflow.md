@@ -10,7 +10,7 @@ Files 视频选择器会把源文件复制到应用临时目录，再读取视�
 AVFoundation source frame
 → Core Image exposure / contrast / saturation
 → Creative .cube LUT + 0…100% alpha blend
-→ source preferredTransform（保持竖拍方向）
+→ source preferredTransform（仅套用一次，保持竖拍方向）
 → Metal-backed CIContext
 → AVPlayer preview 或 AVAssetExportSession
 ```
@@ -25,7 +25,7 @@ AVFoundation source frame
 
 ## 导出
 
-`AVAssetExportSession` 使用 `AVAssetExportPresetHighestQuality` 和同一个 video composition 重新编码视频。优先输出 MP4；若系统会话不支持则回退到 MOV。导出完成后提供系统共享面板保存或发送，源视频不覆盖。现有音轨由 export session 随源资产一并保留。
+`AVAssetExportSession` 使用 `AVAssetExportPresetHighestQuality` 和同一个 video composition 重新编码视频。优先输出 MP4；若系统会话不支持则回退到 MOV。导出完成后提供系统共享面板保存或发送，源视频不覆盖。现有音轨由 export session 随源资产一并保留。iOS 26 使用新的 `AVVideoComposition(applyingFiltersTo:)` API；为保留 iOS 17–25 支持，旧 filtering handler 被隔离在一个兼容层，待最低版本升至 iOS 26 后删除。
 
 ## 已验证与人工验收
 

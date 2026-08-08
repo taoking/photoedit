@@ -176,6 +176,7 @@ private extension JSONEncoder {
 @MainActor
 final class LUTPreviewCache {
     private let cache = NSCache<NSUUID, CGImage>()
+    private var inFlight = Set<UUID>()
 
     subscript(id: UUID) -> CGImage? {
         get { cache.object(forKey: id as NSUUID) }
@@ -185,5 +186,17 @@ final class LUTPreviewCache {
         }
     }
 
-    func clear() { cache.removeAllObjects() }
+    /// 同一个卡片在 SwiftUI 刷新期间可能重复请求；只允许第一个请求启动 render。
+    func beginRequest(for id: UUID) -> Bool {
+        guard cache.object(forKey: id as NSUUID) == nil, !inFlight.contains(id) else { return false }
+        inFlight.insert(id)
+        return true
+    }
+
+    func finishRequest(for id: UUID) { inFlight.remove(id) }
+
+    func clear() {
+        cache.removeAllObjects()
+        inFlight.removeAll()
+    }
 }

@@ -67,8 +67,50 @@ final class LocalAdjustmentTests: XCTestCase {
         XCTAssertEqual(pasted?.light, EditState.initial.light)
     }
 
+    func testRasterizedBrushKeepsNormalizedGeometryAcrossPreviewAndExport() async throws {
+        let source = CIImage(color: CIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 192, height: 192))
+        var state = EditState()
+        var brush = LocalAdjustment.brush()
+        brush.adjustments.exposure = 3
+        brush.mask = .brush(BrushMask(
+            points: [NormalizedPoint(x: 0.22, y: 0.76), NormalizedPoint(x: 0.28, y: 0.76)],
+            size: 0.16,
+            hardness: 1
+        ))
+        state.localAdjustments = [brush]
+        let pipeline = ImagePipeline()
+        let preview = try await pipeline.render(image: source, state: state, lut: nil, mode: .preview(maximumDimension: 96))
+        let exported = try await pipeline.render(image: source, state: state, lut: nil, mode: .export(maximumDimension: nil))
+        let previewCentroid = brightCentroid(preview)
+        let exportCentroid = brightCentroid(exported)
+
+        XCTAssertGreaterThan(previewCentroid.weight, 0)
+        XCTAssertGreaterThan(exportCentroid.weight, 0)
+        XCTAssertEqual(previewCentroid.x, exportCentroid.x, accuracy: 0.03)
+        XCTAssertEqual(previewCentroid.y, exportCentroid.y, accuracy: 0.03)
+    }
+
     private func pixelByteSum(_ image: CGImage) -> Int {
         guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
         return Array(UnsafeBufferPointer(start: bytes, count: CFDataGetLength(data))).reduce(0) { $0 + Int($1) }
+    }
+
+    private func brightCentroid(_ image: CGImage) -> (x: Double, y: Double, weight: Double) {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
+        var total = 0.0
+        var xTotal = 0.0
+        var yTotal = 0.0
+        for y in 0 ..< image.height {
+            let row = bytes.advanced(by: y * image.bytesPerRow)
+            for x in 0 ..< image.width {
+                let value = max(0, Double(row[x * 4]) - 26)
+                total += value
+                xTotal += Double(x) * value
+                yTotal += Double(y) * value
+            }
+        }
+        guard total > 0 else { return (0, 0, 0) }
+        return (xTotal / total / Double(image.width), yTotal / total / Double(image.height), total)
     }
 }

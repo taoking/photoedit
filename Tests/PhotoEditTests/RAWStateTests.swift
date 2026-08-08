@@ -19,4 +19,32 @@ final class RAWStateTests: XCTestCase {
         XCTAssertEqual(decoded.camera, "Sony ILCE-7CM2")
         XCTAssertEqual(decoded.focalLength, 35)
     }
+
+    func testDefaultRAWWhiteBalancePreservesDecoderValuesAndUsesRelativeDeltas() {
+        let defaultAdjustment = RAWAdjustments().whiteBalanceAdjustment
+        XCTAssertTrue(defaultAdjustment.isIdentity)
+        let preserved = defaultAdjustment.resolved(decoderTemperature: 5_250, decoderTint: -18)
+        XCTAssertEqual(preserved.temperature, 5_250)
+        XCTAssertEqual(preserved.tint, -18)
+
+        let changed = RAWWhiteBalanceAdjustment(temperatureDelta: 25, tintDelta: 8)
+            .resolved(decoderTemperature: 5_250, decoderTint: -18)
+        XCTAssertEqual(changed.temperature, 5_750)
+        XCTAssertEqual(changed.tint, -10)
+    }
+
+    func testRAWMetadataParsesEXIFDateTimeOriginalAndTIFFFallbackWithoutInventingUTC() throws {
+        let exif: [CFString: Any] = [kCGImagePropertyExifDateTimeOriginal: "2026:07:15 18:30:21"]
+        let date = try XCTUnwrap(RAWImageSource.captureDate(exif: exif, tiff: nil))
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 7)
+        XCTAssertEqual(components.day, 15)
+        XCTAssertEqual(components.hour, 18)
+        XCTAssertEqual(components.minute, 30)
+        XCTAssertEqual(components.second, 21)
+
+        let tiff: [CFString: Any] = [kCGImagePropertyTIFFDateTime: "2024:01:02 03:04:05"]
+        XCTAssertNotNil(RAWImageSource.captureDate(exif: nil, tiff: tiff))
+    }
 }

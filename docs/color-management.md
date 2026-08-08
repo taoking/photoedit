@@ -7,7 +7,7 @@ PhotoEdit uses one long-lived, Metal-backed `CIContext`. It declares an Extended
 ```text
 Source Color Space
 → Extended Linear sRGB Core Image Working Space
-→ Technical LUT (optional, 100%)
+→ Technical LUT (optional, 100%, source encoding must exactly match)
 → global creative adjustments
 → Creative LUT (optional, 0…100%)
 → transform / crop
@@ -18,18 +18,20 @@ Source Color Space
 
 ## Descriptors
 
-The persisted `ColorSpaceDescriptor` values are sRGB, Display P3, Linear sRGB, Rec.709, Extended Linear sRGB, Rec.709 HLG and Rec.2100 HLG. Extended Linear and HLG are preserved as explicit descriptors rather than silently interpreted as sRGB. Phase 6 adds the HDR preview/export policy; SDR remains the default.
+`ColorSpaceDescriptor` covers the Core Image color spaces the app can actually construct: sRGB, Display P3, Linear sRGB, Rec.709, Extended Linear sRGB, Rec.709 HLG and Rec.2100 HLG. `ColorEncodingDescriptor` separately persists **primaries/gamut** and **transfer function**, so metadata can distinguish e.g. Rec.2020 HLG from Rec.709 HLG instead of treating both as a vague “HDR space”. Existing Phase 5 JSON without these fields migrates from its stored `ColorSpaceDescriptor`.
 
 ## LUT metadata and ordering
 
 Every LUT carries a `LUTKind` and `LUTColorMetadata`:
 
 - `Creative` describes a look such as film, warm/cool or cinematic. It is blended after global adjustments using the selected strength.
-- `Technical` describes a camera/display conversion such as S-Log3 → Rec.709 or HLG → Rec.709. It runs before all creative adjustments and always runs at 100%.
+- `Technical` is a precisely declared conversion for an encoding supported by the current photo pipeline. It runs before all creative adjustments and always runs at 100%.
 
 `.cube` does not reliably encode input or output color spaces. New imports therefore start as `Creative` with both fields unspecified; they cannot be rendered until the user deliberately selects the LUT kind and its input/output descriptors in the LUT panel. Existing catalog entries migrate to the same safe, unspecified state. The built-in Neutral LUT is explicitly sRGB → sRGB.
 
-The metadata is stored with the catalog and validated before rendering. `CIColorCubeWithColorSpace` receives the declared output space as the working color space of the cube texels (the mapped RGB values); the declared input remains an explicit compatibility constraint. A LUT file's title or filename is never treated as proof of its encoding. Users must consult the LUT author/camera documentation before labelling a technical conversion.
+The metadata is stored with the catalog and validated before rendering. The source encoding must equal a Technical LUT’s declared input; PhotoEdit does not apply an undeclared conversion merely because metadata is complete. `CIColorCubeWithColorSpace` receives the declared output space as the working color space of the cube texels. A LUT file's title or filename is never treated as proof of its encoding. Users must consult the LUT author/camera documentation before labelling a technical conversion.
+
+Supported now: the Core Image-backed color-space descriptors above on SDR sources, when the source exactly matches the Technical LUT input. Not supported yet: Sony S-Log3/S-Gamut3/S-Gamut3.Cine, ARRI LogC, generic “Log”, PQ, Dolby Vision and any transform requiring a camera-specific log-to-display conversion. HLG photo sources use the HDR path, where Color Cube LUTs are deliberately disabled until extended-range cube behavior is proven correct.
 
 ## Output and verification limits
 
@@ -37,6 +39,6 @@ SDR exports remain JPEG or HEIF sRGB, with the existing metadata/GPS policy. Pha
 
 Manual verification is required with the original camera/display assets:
 
-- Compare a known S-Log3 → Rec.709 and HLG → Rec.709 Technical LUT on a physical device against the LUT vendor's reference viewer.
+- Compare an exact SDR Rec.709/sRGB Technical LUT on a physical device against the LUT vendor's reference viewer. Do not use S-Log3/HLG/PQ LUTs in the current release; those encodings are intentionally rejected.
 - Check Display P3 source import and sRGB export on both an SDR-only display and a wide-gamut iPhone display.
 - Compare Preview with a full-resolution JPEG/HEIF export, including a Technical LUT followed by a Creative LUT.

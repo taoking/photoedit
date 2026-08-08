@@ -161,7 +161,7 @@ final class VideoEditorViewModel: ObservableObject {
                 _ = try await playerAsset.loadTracks(withMediaType: .video)
                 guard !Task.isCancelled, let self, generation == self.previewGeneration else { return }
                 let item = AVPlayerItem(asset: playerAsset)
-                item.videoComposition = VideoFrameProcessor.videoComposition(
+                item.videoComposition = try await VideoFrameProcessor.videoComposition(
                     asset: playerAsset,
                     state: renderState,
                     lut: lut,
