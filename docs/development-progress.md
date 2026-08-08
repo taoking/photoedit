@@ -2,25 +2,25 @@
 
 ## Phase 8.5 — Correctness & Real-world Validation
 
-Status: COMPLETED (AUTOMATED)
+Status: COMPLETED
 
 Commit: recorded by the Phase 8.5 commit in Git history
 
-Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 58 tests, 0 failures.
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 65 tests, 0 failures（iPhone 17 Pro、iOS 26.5）。
 
 Build: PASS — `xcodegen generate` 后，iPhone 17 Pro、iOS 26.5 Simulator 的独立 `xcodebuild ... build` 成功；安装和启动冒烟检查成功。
 
 Phase 8.5 Acceptance:
 
-- [PASS] RAW 零 temperature/tint 改为相对 CIRAWFilter decoder/as-shot 白平衡的零增量；旧 `EditState` JSON 无 schema 破坏。
+- [PASS] RAW 零 temperature/tint 改为相对 CIRAWFilter decoder/as-shot 白平衡的零增量；新建 RAW state 的 luminance/color NR、sharpness、detail、local tone 与 lens correction 均以 `nil` 表示「不触碰 decoder」。旧 JSON 无法区分默认 0 与显式 0，故其已存值迁移为显式覆盖以保持既有编辑结果。
 - [PASS] EXIF `DateTimeOriginal` 使用 `yyyy:MM:dd HH:mm:ss` + `en_US_POSIX` 解析，并以 TIFF DateTime fallback；缺少时区时不伪造 UTC。
 - [PASS] HDR synthetic `RGB > 1` identity HSL/curve 路径保留 half-float headroom；非 identity HSL、曲线和 Technical/Creative Color Cube LUT 被 UI 与 render pipeline 明确拒绝，避免静默 SDR 裁切。
-- [PASS] LUT metadata 额外建模 primaries/gamut 与 transfer function；Technical LUT 必须和实际 source encoding 精确匹配。S-Log3/S-Gamut3(.Cine)、LogC、PQ 等未实现 encoding 会安全拒绝。
+- [PASS] LUT metadata 额外建模 primaries/gamut 与 transfer function；Technical LUT 必须和实际 source encoding 精确匹配，且仅允许 input/output encoding 完全相同。跨 encoding、S-Log3/S-Gamut3(.Cine)、LogC、PQ、HLG Technical conversion 等会安全拒绝。
 - [PASS] `.cube DOMAIN_MIN/MAX` 在进入 Color Cube 前逐通道归一化；反向/零宽 domain 被拒绝。
 - [PASS] 导出 metadata 强制 Orientation=1、正确根/EXIF/TIFF 像素尺寸、移除陈旧 thumbnail，并回归验证 crop/rotate/resize/GPS remove。
 - [PASS] Histogram 从最后成功的 edited preview 节流计算，不重复渲染 source；正曝光回归验证其向亮部移动。
-- [PASS] Brush mask 改为按 Preview/Export 尺寸栅格化的 alpha bitmap cache，不再构建最多 512 个 CI radial filter 节点；归一化 Preview/Export 对齐测试通过。
-- [PASS] 视频新增 80×40、90° preferredTransform fixture，导出 display geometry 为 40×80、时长正确且无 double rotate。iOS 26 使用新 API；iOS 17–25 的旧 API 仅保留在隔离兼容层。
+- [PASS] Brush mask 改为按 Preview/Export 尺寸栅格化的 8-bit DeviceGray（1 BPP）bitmap cache，不再构建最多 512 个 CI radial filter 节点；CI 图内仅把灰度映射为 alpha 后用于 `CIBlendWithAlphaMask`，归一化 Preview/Export 对齐测试通过。
+- [PASS] 视频新增 80×40、90° preferredTransform fixture，导出 display geometry 为 40×80、时长正确且无 double rotate。最低版本提升至 iOS 26.0，视频统一使用 iOS 26 filtering API，已删除 iOS 17–25 legacy composition 分支。
 - [PASS] `SWIFT_STRICT_CONCURRENCY` 从 `minimal` 提升到 `targeted`；增加最后导入请求获胜和 LUT thumbnail in-flight 去重回归。
 
 Manual Verification Required:

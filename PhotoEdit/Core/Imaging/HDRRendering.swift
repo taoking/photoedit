@@ -46,12 +46,10 @@ enum HDRRenderingError: LocalizedError, Sendable, Equatable {
 
 enum HDRRendering {
     static func sourceHeadroom(for image: CIImage, colorSpace: ColorSpaceDescriptor?) -> Float {
-        if #available(iOS 18.0, *) {
-            let reported = image.contentHeadroom
-            if reported >= 1 { return reported }
-        }
-        // HLG/extended 色彩空间没有在 iOS 17 上公开 contentHeadroom 时，保守地用 2x
-        // 触发 SDR tone mapping；并不会据此允许不存在 HDR 内容的普通 sRGB 图像导出 HDR。
+        let reported = image.contentHeadroom
+        if reported >= 1 { return reported }
+        // 未报告 headroom 的 HLG/extended 输入保守地按 2x 处理；并不会据此允许
+        // 普通 sRGB 图像导出 HDR。
         return colorSpace?.isHDR == true ? 2 : 1
     }
 
@@ -84,7 +82,6 @@ enum HDRRendering {
 
     static func toneMapToSDR(_ image: CIImage, sourceHeadroom: Float) throws -> CIImage {
         guard sourceHeadroom > 1 else { return image }
-        guard #available(iOS 18.0, *) else { throw HDRRenderingError.toneMappingUnavailable }
         guard let filter = CIFilter(name: "CIToneMapHeadroom") else {
             throw HDRRenderingError.toneMappingUnavailable
         }

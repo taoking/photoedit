@@ -557,7 +557,7 @@ private struct RAWPanel: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("RAW Decode").font(.headline)
                     MetadataGrid(metadata: metadata)
-                    rawSlider("RAW 曝光", keyPath: \.exposure, range: -5...5)
+                    rawExposureSlider("RAW 曝光", range: -5...5)
                     rawSlider("RAW 色温增量", keyPath: \.temperature, range: -100...100)
                     rawSlider("RAW 色调增量", keyPath: \.tint, range: -100...100)
                     rawSlider("明度降噪", keyPath: \.luminanceNoiseReduction, range: 0...1)
@@ -565,8 +565,8 @@ private struct RAWPanel: View {
                     rawSlider("RAW 锐化", keyPath: \.sharpness, range: 0...1)
                     rawSlider("细节", keyPath: \.detail, range: 0...3)
                     rawSlider("局部色调", keyPath: \.localTone, range: 0...1)
-                    Toggle("镜头校正", isOn: Binding(get: { model.state.raw?.lensCorrectionEnabled ?? false }, set: { value in model.update { $0.raw?.lensCorrectionEnabled = value } }))
-                    Text("零色温/色调增量保留相机 as-shot 白平衡。Preview 先使用 CIRAWFilter draft decode；导出重新以全分辨率 RAW decode。")
+                    Toggle("镜头校正", isOn: Binding(get: { model.state.raw?.lensCorrectionEnabled ?? true }, set: { value in model.update { $0.raw?.lensCorrectionEnabled = value } }))
+                    Text("零色温/色调增量保留相机 as-shot 白平衡。降噪、锐化、细节、局部色调和镜头校正在未触碰时保留 CIRAWFilter decoder 默认值；滑杆显示 0、开关显示开启仅为可编辑 UI 初始值。Preview 先使用 draft decode；导出重新以全分辨率 RAW decode。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding()
@@ -576,8 +576,40 @@ private struct RAWPanel: View {
         }
     }
 
+    private func rawExposureSlider(_ title: String, range: ClosedRange<Double>) -> some View {
+        rawSliderControl(
+            title,
+            value: Binding(
+                get: { model.state.raw?.exposure ?? 0 },
+                set: { newValue in model.updateContinuous { $0.raw?.exposure = newValue } }
+            ),
+            range: range
+        )
+    }
+
+    private func rawSlider(_ title: String, keyPath: WritableKeyPath<RAWAdjustments, Double?>, range: ClosedRange<Double>) -> some View {
+        rawSliderControl(
+            title,
+            value: Binding(
+                get: { model.state.raw?[keyPath: keyPath] ?? 0 },
+                set: { newValue in model.updateContinuous { $0.raw?[keyPath: keyPath] = newValue } }
+            ),
+            range: range
+        )
+    }
+
     private func rawSlider(_ title: String, keyPath: WritableKeyPath<RAWAdjustments, Double>, range: ClosedRange<Double>) -> some View {
-        let value = Binding<Double>(get: { model.state.raw?[keyPath: keyPath] ?? 0 }, set: { newValue in model.updateContinuous { $0.raw?[keyPath: keyPath] = newValue } })
+        rawSliderControl(
+            title,
+            value: Binding(
+                get: { model.state.raw?[keyPath: keyPath] ?? 0 },
+                set: { newValue in model.updateContinuous { $0.raw?[keyPath: keyPath] = newValue } }
+            ),
+            range: range
+        )
+    }
+
+    private func rawSliderControl(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         return VStack(spacing: 2) {
             HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(2)))").foregroundStyle(.secondary).monospacedDigit() }
             Slider(value: value, in: range, onEditingChanged: { editing in if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() } })

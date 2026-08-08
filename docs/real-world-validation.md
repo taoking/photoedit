@@ -12,6 +12,7 @@
 ## Sony A7C II ARW / DNG
 
 - 初次打开应与相机 as-shot 白平衡一致；不移动 RAW 色温/色调滑杆时不能被重置到 6500 K。
+- 不调整任何 RAW slider 时，将结果与系统/Core Image decoder 默认 render 对比；明度/色彩降噪、RAW 锐化、细节、局部色调和镜头校正均不得被 PhotoEdit 的 UI 初始值覆盖。
 - 调整 RAW 温度/色调增量、曝光、双降噪、锐化、细节、局部色调和镜头校正。
 - 比较 draft preview、较高质量 preview 与 JPEG/HEIF 全分辨率导出；检查相机与镜头 metadata。
 - 记录 24MP/48MP 真实文件的首帧、滑杆延迟、峰值内存和导出时间。
@@ -19,8 +20,8 @@
 ## LUT
 
 - 验证 17³、33³、65³ cube，以及非默认 `DOMAIN_MIN/MAX` 的厂商样本。
-- 只依据作者资料配置 Creative/Technical 与 encoding；确认不匹配 source 的 Technical LUT 被拒绝。
-- Sony S-Log3/S-Gamut3(.Cine)、LogC、PQ 和未声明 LUT 当前应被拒绝，不能人工标记为 sRGB 后误用。
+- 只依据作者资料配置 Creative/Technical 与 encoding；确认不匹配 source 的 Technical LUT、以及所有跨 encoding Technical LUT（例如 Rec.709 → sRGB）均被拒绝。
+- Sony S-Log3/S-Gamut3(.Cine)、LogC、PQ、HLG Technical conversion 和未声明 LUT 当前应被拒绝，不能人工标记为 sRGB 后误用。
 
 ## HDR
 

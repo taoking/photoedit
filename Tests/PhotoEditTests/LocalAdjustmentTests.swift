@@ -91,6 +91,34 @@ final class LocalAdjustmentTests: XCTestCase {
         XCTAssertEqual(previewCentroid.y, exportCentroid.y, accuracy: 0.03)
     }
 
+    func testEmptyBrushMaskKeepsBackgroundUnchanged() async throws {
+        let source = CIImage(color: CIColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64))
+        var state = EditState()
+        var brush = LocalAdjustment.brush()
+        brush.adjustments.exposure = 3
+        brush.mask = .brush(BrushMask(points: [], size: 0.4, hardness: 1))
+        state.localAdjustments = [brush]
+        let pipeline = ImagePipeline()
+
+        let base = try await pipeline.render(image: source, state: .initial, lut: nil, mode: .preview(maximumDimension: 64))
+        let output = try await pipeline.render(image: source, state: state, lut: nil, mode: .preview(maximumDimension: 64))
+        XCTAssertEqual(pixelByteSum(output), pixelByteSum(base))
+    }
+
+    func testRasterizedBrushUsesSingleGrayChannelWithWhiteActiveAndBlackInactive() throws {
+        let brush = BrushMask(points: [NormalizedPoint(x: 0.5, y: 0.5)], size: 0.4, hardness: 1)
+        let image = try XCTUnwrap(LocalAdjustmentProcessor.rasterizedBrushMask(brush, width: 31, height: 19))
+        let data = try XCTUnwrap(image.dataProvider?.data)
+        let bytes = try XCTUnwrap(CFDataGetBytePtr(data))
+
+        XCTAssertEqual(image.bitsPerPixel, 8)
+        XCTAssertEqual(image.alphaInfo, .none)
+        XCTAssertLessThanOrEqual(image.bytesPerRow, 32) // 31 BPP + optional row alignment
+        XCTAssertEqual(bytes[9 * image.bytesPerRow + 15], 255)
+        XCTAssertEqual(bytes[0], 0)
+    }
+
     private func pixelByteSum(_ image: CGImage) -> Int {
         guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
         return Array(UnsafeBufferPointer(start: bytes, count: CFDataGetLength(data))).reduce(0) { $0 + Int($1) }

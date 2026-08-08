@@ -7,7 +7,7 @@ PhotoEdit uses one long-lived, Metal-backed `CIContext`. It declares an Extended
 ```text
 Source Color Space
 → Extended Linear sRGB Core Image Working Space
-→ Technical LUT (optional, 100%, source encoding must exactly match)
+→ Technical LUT (optional, 100%，source encoding 必须精确匹配，且 input/output encoding 必须相同)
 → global creative adjustments
 → Creative LUT (optional, 0…100%)
 → transform / crop
@@ -29,9 +29,9 @@ Every LUT carries a `LUTKind` and `LUTColorMetadata`:
 
 `.cube` does not reliably encode input or output color spaces. New imports therefore start as `Creative` with both fields unspecified; they cannot be rendered until the user deliberately selects the LUT kind and its input/output descriptors in the LUT panel. Existing catalog entries migrate to the same safe, unspecified state. The built-in Neutral LUT is explicitly sRGB → sRGB.
 
-The metadata is stored with the catalog and validated before rendering. The source encoding must equal a Technical LUT’s declared input; PhotoEdit does not apply an undeclared conversion merely because metadata is complete. `CIColorCubeWithColorSpace` receives the declared output space as the working color space of the cube texels. A LUT file's title or filename is never treated as proof of its encoding. Users must consult the LUT author/camera documentation before labelling a technical conversion.
+The metadata is stored with the catalog and validated before rendering. Technical LUT 的 source encoding 必须等于声明的 input encoding，且 input encoding 必须完全等于 output encoding；PhotoEdit 不会因为 metadata 完整就执行任何跨编码转换。`CIColorCubeWithColorSpace` receives the declared output space as the working color space of the cube texels. A LUT file's title or filename is never treated as proof of its encoding. Users must consult the LUT author/camera documentation before labelling a technical conversion.
 
-Supported now: the Core Image-backed color-space descriptors above on SDR sources, when the source exactly matches the Technical LUT input. Not supported yet: Sony S-Log3/S-Gamut3/S-Gamut3.Cine, ARRI LogC, generic “Log”, PQ, Dolby Vision and any transform requiring a camera-specific log-to-display conversion. HLG photo sources use the HDR path, where Color Cube LUTs are deliberately disabled until extended-range cube behavior is proven correct.
+Supported now: SDR source 上的 **same-encoding Technical LUT only**，且 source encoding 必须精确匹配，例如 sRGB → sRGB 与 Rec.709 → Rec.709。Not supported: cross-encoding Technical LUT（包括 Rec.709 → sRGB、Display P3 → sRGB、HLG → Rec.709）、Sony S-Log3/S-Gamut3/S-Gamut3.Cine、ARRI LogC、generic “Log”、PQ、Dolby Vision，以及任何 camera-log-to-display 转换。HLG photo sources use the HDR path, where Color Cube LUTs are deliberately disabled until extended-range cube behavior is proven correct.
 
 ## Output and verification limits
 
@@ -39,6 +39,6 @@ SDR exports remain JPEG or HEIF sRGB, with the existing metadata/GPS policy. Pha
 
 Manual verification is required with the original camera/display assets:
 
-- Compare an exact SDR Rec.709/sRGB Technical LUT on a physical device against the LUT vendor's reference viewer. Do not use S-Log3/HLG/PQ LUTs in the current release; those encodings are intentionally rejected.
+- Compare an exact same-encoding SDR Technical LUT（sRGB → sRGB 或 Rec.709 → Rec.709）on a physical device against the LUT vendor's reference viewer. Do not use cross-encoding、S-Log3/HLG/PQ LUTs in the current release; those encodings are intentionally rejected.
 - Check Display P3 source import and sRGB export on both an SDR-only display and a wide-gamut iPhone display.
 - Compare Preview with a full-resolution JPEG/HEIF export, including a Technical LUT followed by a Creative LUT.

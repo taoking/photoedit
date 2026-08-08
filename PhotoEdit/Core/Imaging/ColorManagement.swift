@@ -168,7 +168,23 @@ struct LUTColorMetadata: Codable, Equatable, Sendable {
     static let sRGB = LUTColorMetadata(inputColorSpace: .sRGB, outputColorSpace: .sRGB)
 
     var isComplete: Bool { inputEncoding != nil && outputEncoding != nil }
-    var isImplementedByPhotoPipeline: Bool { inputColorSpace != nil && outputColorSpace != nil }
+    /// Metadata 中的 legacy color-space 字段必须与 encoding 反解结果一致。否则不能让
+    /// 两套描述相互矛盾地绕过 Technical LUT 的 source/encoding 校验。
+    var isImplementedByPhotoPipeline: Bool {
+        guard let inputEncoding,
+              let outputEncoding,
+              let resolvedInput = inputEncoding.colorSpaceDescriptor,
+              let resolvedOutput = outputEncoding.colorSpaceDescriptor else {
+            return false
+        }
+        return inputColorSpace == resolvedInput && outputColorSpace == resolvedOutput
+    }
+
+    /// 当前没有跨 encoding 的 Technical transform；即使两个 encoding 都能被 Core Image
+    /// 描述，也只能安全地接受严格 identity encoding 的 Technical LUT。
+    var hasSameInputAndOutputEncoding: Bool {
+        inputEncoding != nil && inputEncoding == outputEncoding
+    }
     var summary: String {
         guard let inputEncoding, let outputEncoding else { return "色彩空间未指定" }
         guard let inputColorSpace, let outputColorSpace else {
@@ -190,6 +206,7 @@ enum ColorManagementError: LocalizedError, Sendable {
     case missingLUTMetadata(name: String)
     case invalidTechnicalLUT(name: String)
     case incompatibleTechnicalLUT(name: String, source: ColorSpaceDescriptor, expected: ColorSpaceDescriptor)
+    case crossEncodingTechnicalLUTUnsupported(name: String, input: ColorEncodingDescriptor, output: ColorEncodingDescriptor)
     case unsupportedLUTEncoding(name: String)
 
     var errorDescription: String? {
@@ -197,6 +214,7 @@ enum ColorManagementError: LocalizedError, Sendable {
         case let .missingLUTMetadata(name): "LUT“\(name)”未声明输入和输出色彩空间，不能安全套用。"
         case let .invalidTechnicalLUT(name): "Technical LUT“\(name)”缺少完整的色彩变换描述。"
         case let .incompatibleTechnicalLUT(name, source, expected): "Technical LUT“\(name)”需要 \(expected.title) 输入，但当前照片是 \(source.title)；应用未执行未经声明的转换。"
+        case let .crossEncodingTechnicalLUTUnsupported(name, input, output): "Technical LUT“\(name)”声明了 \(input.transferFunction.rawValue) → \(output.transferFunction.rawValue) 的跨编码转换；当前版本仅支持输入和输出 encoding 完全相同的 Technical LUT。"
         case let .unsupportedLUTEncoding(name): "LUT“\(name)”使用当前照片管线尚未实现的色域或传递函数（例如 S-Log3）；已安全拒绝套用。"
         }
     }

@@ -84,34 +84,37 @@ enum LocalAdjustmentProcessor {
         guard let raster = rasterizedBrushMask(brush, width: width, height: height) else {
             throw ImageEditorError.renderFailed
         }
-        let mask = CIImage(cgImage: raster)
-        let cost = width * height * 4
+        let mask = alphaMask(from: CIImage(cgImage: raster))
+        // 只缓存单通道 DeviceGray backing；实际 cost 必须来自 CGImage，而不是假设 RGBA 4 BPP。
+        let cost = raster.bytesPerRow * raster.height
         if cost <= brushMaskCacheLimit {
             brushMaskCache.store(mask, for: key, cost: cost)
         }
         return mask.transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY)).cropped(to: extent)
     }
 
-    /// 将归一化笔画一次栅格化为 alpha mask；调节曝光/对比度/饱和度只复用该 mask，
+    /// 将归一化笔画一次栅格化为 DeviceGray mask；调节曝光/对比度/饱和度只复用该 mask，
     /// 不再为每次 render 拼接最多 512 个 CIRadialGradient 节点。
-    private static func rasterizedBrushMask(_ brush: BrushMask, width: Int, height: Int) -> CGImage? {
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    /// 画笔 mask 只需要 8-bit DeviceGray：48MP 图片约为 48 MB，而非 RGBA 的约 192 MB。该函数
+    /// 保持 internal 以便回归测试验证真实 CGImage 的单通道布局。
+    static func rasterizedBrushMask(_ brush: BrushMask, width: Int, height: Int) -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let context = CGContext(
             data: nil,
             width: width,
             height: height,
             bitsPerComponent: 8,
-            bytesPerRow: width * 4,
+            bytesPerRow: width,
             space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
         ) else { return nil }
         context.clear(CGRect(x: 0, y: 0, width: width, height: height))
 
         let shortEdge = CGFloat(min(width, height))
         let outerRadius = max(1, CGFloat(brush.size.clamped(to: 0.01...1)) * shortEdge / 2)
         let hardness = CGFloat(brush.hardness.clamped(to: 0...1))
-        let opaque = CGColor(colorSpace: colorSpace, components: [1, 1, 1, 1])!
-        let transparent = CGColor(colorSpace: colorSpace, components: [1, 1, 1, 0])!
+        let opaque = CGColor(gray: 1, alpha: 1)
+        let transparent = CGColor(gray: 1, alpha: 0)
         let gradient: CGGradient? = hardness >= 0.999 ? nil : CGGradient(
             colorsSpace: colorSpace,
             colors: [opaque, opaque, transparent] as CFArray,
@@ -142,6 +145,17 @@ enum LocalAdjustmentProcessor {
             }
         }
         return context.makeImage()
+    }
+
+    /// CIBlendWithAlphaMask 读取 alpha 而非灰度。CPU 端只保存 1 BPP 的 DeviceGray；
+    /// 这个轻量 CI 节点将 R（灰度）映射到 alpha，确保白色作用、黑色保留背景。
+    private static func alphaMask(from grayscale: CIImage) -> CIImage {
+        grayscale.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 1, y: 0, z: 0, w: 0)
+        ])
     }
 
     private static func brushCacheKey(_ brush: BrushMask, width: Int, height: Int) -> NSString {

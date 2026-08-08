@@ -151,30 +151,12 @@ private final class VideoRenderContext: @unchecked Sendable {
 
 enum VideoFrameProcessor {
     static func videoComposition(asset: AVAsset, state: VideoEditState, lut: LUT?, transform: VideoFrameTransform) async throws -> AVVideoComposition {
-        if #available(iOS 26.0, *) {
-            let renderContext = VideoRenderContext()
-            // iOS 26 的 value-type filtering API 取代了旧的 request.finish handler。
-            // 初始化器会按 preferredTransform 建立正确的 renderSize；像素方向仍只在
-            // apply 中转换一次。
-            return try await AVVideoComposition(applyingFiltersTo: asset) { parameters in
-                let output = (try? apply(parameters.sourceImage, state: state, lut: lut, transform: transform)) ?? parameters.sourceImage
-                return AVCIImageFilteringResult(resultImage: output, ciContext: renderContext.context)
-            }
-        }
-        return legacyVideoComposition(asset: asset, state: state, lut: lut, transform: transform)
-    }
-
-    /// iOS 17–25 没有可替代的 Swift filtering API。将弃用 API 限定在唯一兼容层，
-    /// 以便最低系统版本提升到 iOS 26 时可整体删除，而不扩散到预览/导出调用点。
-    private static func legacyVideoComposition(asset: AVAsset, state: VideoEditState, lut: LUT?, transform: VideoFrameTransform) -> AVVideoComposition {
         let renderContext = VideoRenderContext()
-        return AVVideoComposition(asset: asset) { request in
-            do {
-                let output = try apply(request.sourceImage, state: state, lut: lut, transform: transform)
-                request.finish(with: output, context: renderContext.context)
-            } catch {
-                request.finish(with: error)
-            }
+        // 最低系统为 iOS 26；统一使用当前 value-type filtering API。初始化器会按
+        // preferredTransform 建立 renderSize，像素方向仍只在 apply 中转换一次。
+        return try await AVVideoComposition(applyingFiltersTo: asset) { parameters in
+            let output = (try? apply(parameters.sourceImage, state: state, lut: lut, transform: transform)) ?? parameters.sourceImage
+            return AVCIImageFilteringResult(resultImage: output, ciContext: renderContext.context)
         }
     }
 

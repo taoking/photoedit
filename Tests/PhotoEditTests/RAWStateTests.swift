@@ -33,6 +33,63 @@ final class RAWStateTests: XCTestCase {
         XCTAssertEqual(changed.tint, -10)
     }
 
+    func testDefaultRAWDecoderDependentControlsDoNotRequestOverrides() {
+        let overrides = RAWAdjustments().decoderOverrides
+
+        XCTAssertNil(overrides.luminanceNoiseReduction)
+        XCTAssertNil(overrides.colorNoiseReduction)
+        XCTAssertNil(overrides.sharpness)
+        XCTAssertNil(overrides.detail)
+        XCTAssertNil(overrides.localTone)
+        XCTAssertNil(overrides.lensCorrectionEnabled)
+    }
+
+    func testExplicitRAWDecoderDependentControlsRequestClampedOverrides() {
+        let overrides = RAWAdjustments(
+            luminanceNoiseReduction: 1.5,
+            colorNoiseReduction: -1,
+            sharpness: 0.6,
+            detail: 4,
+            localTone: 0.8,
+            lensCorrectionEnabled: false
+        ).decoderOverrides
+
+        XCTAssertEqual(overrides.luminanceNoiseReduction, 1)
+        XCTAssertEqual(overrides.colorNoiseReduction, 0)
+        XCTAssertEqual(overrides.sharpness, 0.6)
+        XCTAssertEqual(overrides.detail, 3)
+        XCTAssertEqual(overrides.localTone, 0.8)
+        XCTAssertEqual(overrides.lensCorrectionEnabled, false)
+    }
+
+    func testLegacyRAWStateRemainsDecodableAndMigratesStoredValuesToOverrides() throws {
+        let legacy = """
+        {
+          "raw": {
+            "exposure": 0,
+            "temperature": 0,
+            "tint": 0,
+            "luminanceNoiseReduction": 0,
+            "colorNoiseReduction": 0.2,
+            "sharpness": 0.3,
+            "detail": 1.1,
+            "localTone": 0.4,
+            "lensCorrectionEnabled": true
+          }
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(EditState.self, from: legacy)
+        XCTAssertEqual(decoded.raw?.decoderOverrides, RAWDecoderOverrides(
+            luminanceNoiseReduction: 0,
+            colorNoiseReduction: 0.2,
+            sharpness: 0.3,
+            detail: 1.1,
+            localTone: 0.4,
+            lensCorrectionEnabled: true
+        ))
+    }
+
     func testRAWMetadataParsesEXIFDateTimeOriginalAndTIFFFallbackWithoutInventingUTC() throws {
         let exif: [CFString: Any] = [kCGImagePropertyExifDateTimeOriginal: "2026:07:15 18:30:21"]
         let date = try XCTUnwrap(RAWImageSource.captureDate(exif: exif, tiff: nil))

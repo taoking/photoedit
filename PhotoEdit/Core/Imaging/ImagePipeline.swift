@@ -102,7 +102,6 @@ actor ImagePipeline {
             target: .hdr,
             format: settings.format
         )
-        guard #available(iOS 15.0, *) else { throw HDRRenderingError.hdrEncodingUnavailable }
         let rendered = try renderedImage(
             source: try sourceImage(
                 for: asset,
@@ -221,10 +220,20 @@ actor ImagePipeline {
             guard technicalLUT.colorMetadata.isImplementedByPhotoPipeline else {
                 throw ColorManagementError.unsupportedLUTEncoding(name: technicalLUT.title ?? "未命名 LUT")
             }
-            guard let expected = technicalLUT.colorMetadata.inputColorSpace else {
+            guard let inputEncoding = technicalLUT.colorMetadata.inputEncoding,
+                  let outputEncoding = technicalLUT.colorMetadata.outputEncoding,
+                  let expected = technicalLUT.colorMetadata.inputColorSpace,
+                  let sourceEncoding = ColorEncodingDescriptor(colorSpace: source) else {
                 throw ColorManagementError.invalidTechnicalLUT(name: technicalLUT.title ?? "未命名 LUT")
             }
-            guard expected == source else {
+            guard technicalLUT.colorMetadata.hasSameInputAndOutputEncoding else {
+                throw ColorManagementError.crossEncodingTechnicalLUTUnsupported(
+                    name: technicalLUT.title ?? "未命名 LUT",
+                    input: inputEncoding,
+                    output: outputEncoding
+                )
+            }
+            guard sourceEncoding == inputEncoding else {
                 throw ColorManagementError.incompatibleTechnicalLUT(
                     name: technicalLUT.title ?? "未命名 LUT",
                     source: source,

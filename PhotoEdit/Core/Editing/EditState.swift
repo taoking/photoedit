@@ -49,15 +49,128 @@ struct RAWAdjustments: Codable, Equatable, Sendable {
     var temperature: Double = 0
     /// 相对 RAW decoder / as-shot 白平衡的 tint 增量；0 必须保持 decoder 默认值。
     var tint: Double = 0
-    var luminanceNoiseReduction: Double = 0
-    var colorNoiseReduction: Double = 0
-    var sharpness: Double = 0
-    var detail: Double = 0
-    var localTone: Double = 0
-    var lensCorrectionEnabled = true
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var luminanceNoiseReduction: Double?
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var colorNoiseReduction: Double?
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var sharpness: Double?
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var detail: Double?
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var localTone: Double?
+    /// `nil` 表示从未由用户覆盖，必须保留 CIRAWFilter decoder 默认值。
+    var lensCorrectionEnabled: Bool?
+
+    /// 新 schema 使用 Optional 表达「未覆盖」。旧版本 JSON 没有这个标记，无法区分
+    /// 用户手动设为 0 与旧 UI 的默认 0，因此为保持既有编辑结果，把旧值迁移为显式覆盖。
+    private static let decoderOverrideSchemaVersion = 1
+
+    private enum CodingKeys: String, CodingKey {
+        case decoderOverrideSchemaVersion
+        case exposure, temperature, tint
+        case luminanceNoiseReduction, colorNoiseReduction, sharpness, detail, localTone, lensCorrectionEnabled
+    }
+
+    init(
+        exposure: Double = 0,
+        temperature: Double = 0,
+        tint: Double = 0,
+        luminanceNoiseReduction: Double? = nil,
+        colorNoiseReduction: Double? = nil,
+        sharpness: Double? = nil,
+        detail: Double? = nil,
+        localTone: Double? = nil,
+        lensCorrectionEnabled: Bool? = nil
+    ) {
+        self.exposure = exposure
+        self.temperature = temperature
+        self.tint = tint
+        self.luminanceNoiseReduction = luminanceNoiseReduction
+        self.colorNoiseReduction = colorNoiseReduction
+        self.sharpness = sharpness
+        self.detail = detail
+        self.localTone = localTone
+        self.lensCorrectionEnabled = lensCorrectionEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exposure = try container.decodeIfPresent(Double.self, forKey: .exposure) ?? 0
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature) ?? 0
+        tint = try container.decodeIfPresent(Double.self, forKey: .tint) ?? 0
+
+        // Phase 8.5 前的 JSON 中，这些字段全是非 Optional。保留其写入语义，避免
+        // 已保存的 RAW 编辑被无声改变；所有新建 RAW state 则会以 nil 保留 decoder。
+        let isLegacy = !container.contains(.decoderOverrideSchemaVersion)
+        luminanceNoiseReduction = try container.decodeIfPresent(Double.self, forKey: .luminanceNoiseReduction)
+        colorNoiseReduction = try container.decodeIfPresent(Double.self, forKey: .colorNoiseReduction)
+        sharpness = try container.decodeIfPresent(Double.self, forKey: .sharpness)
+        detail = try container.decodeIfPresent(Double.self, forKey: .detail)
+        localTone = try container.decodeIfPresent(Double.self, forKey: .localTone)
+        lensCorrectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .lensCorrectionEnabled)
+
+        if !isLegacy {
+            // 读取版本标记以拒绝损坏的非整数值；当前仅有一个 schema。
+            _ = try container.decode(Int.self, forKey: .decoderOverrideSchemaVersion)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.decoderOverrideSchemaVersion, forKey: .decoderOverrideSchemaVersion)
+        try container.encode(exposure, forKey: .exposure)
+        try container.encode(temperature, forKey: .temperature)
+        try container.encode(tint, forKey: .tint)
+        try container.encodeIfPresent(luminanceNoiseReduction, forKey: .luminanceNoiseReduction)
+        try container.encodeIfPresent(colorNoiseReduction, forKey: .colorNoiseReduction)
+        try container.encodeIfPresent(sharpness, forKey: .sharpness)
+        try container.encodeIfPresent(detail, forKey: .detail)
+        try container.encodeIfPresent(localTone, forKey: .localTone)
+        try container.encodeIfPresent(lensCorrectionEnabled, forKey: .lensCorrectionEnabled)
+    }
 
     var whiteBalanceAdjustment: RAWWhiteBalanceAdjustment {
         RAWWhiteBalanceAdjustment(temperatureDelta: temperature, tintDelta: tint)
+    }
+
+    /// 将 UI 值转换为可安全写入 CIRAWFilter 的显式请求。所有 nil 均意味着完全不触碰
+    /// 对应 decoder 属性，因此新打开 RAW 的初始效果等于相机 / decoder 默认效果。
+    var decoderOverrides: RAWDecoderOverrides {
+        RAWDecoderOverrides(
+            luminanceNoiseReduction: luminanceNoiseReduction.map { Float($0.clamped(to: 0...1)) },
+            colorNoiseReduction: colorNoiseReduction.map { Float($0.clamped(to: 0...1)) },
+            sharpness: sharpness.map { Float($0.clamped(to: 0...1)) },
+            detail: detail.map { Float($0.clamped(to: 0...3)) },
+            localTone: localTone.map { Float($0.clamped(to: 0...1)) },
+            lensCorrectionEnabled: lensCorrectionEnabled
+        )
+    }
+}
+
+/// CIRAWFilter 相关参数的最终覆盖请求。Optional 表示「不设置该 filter 属性」。
+struct RAWDecoderOverrides: Equatable, Sendable {
+    var luminanceNoiseReduction: Float?
+    var colorNoiseReduction: Float?
+    var sharpness: Float?
+    var detail: Float?
+    var localTone: Float?
+    var lensCorrectionEnabled: Bool?
+
+    init(
+        luminanceNoiseReduction: Float? = nil,
+        colorNoiseReduction: Float? = nil,
+        sharpness: Float? = nil,
+        detail: Float? = nil,
+        localTone: Float? = nil,
+        lensCorrectionEnabled: Bool? = nil
+    ) {
+        self.luminanceNoiseReduction = luminanceNoiseReduction
+        self.colorNoiseReduction = colorNoiseReduction
+        self.sharpness = sharpness
+        self.detail = detail
+        self.localTone = localTone
+        self.lensCorrectionEnabled = lensCorrectionEnabled
     }
 }
 

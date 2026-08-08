@@ -16,11 +16,11 @@ final class ColorManagementTests: XCTestCase {
         let pipeline = ImagePipeline()
         let technical = TestLUTFactory.identityLUT().configured(
             kind: .technical,
-            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .sRGB)
+            colorMetadata: .sRGB
         )
         let creative = TestLUTFactory.identityLUT()
-        let plan = try await pipeline.colorRenderPlan(source: .rec709, technicalLUT: technical, creativeLUT: creative)
-        XCTAssertEqual(plan.source, .rec709)
+        let plan = try await pipeline.colorRenderPlan(source: .sRGB, technicalLUT: technical, creativeLUT: creative)
+        XCTAssertEqual(plan.source, .sRGB)
         XCTAssertEqual(plan.working, .extendedLinearSRGB)
         XCTAssertTrue(plan.hasTechnicalTransform)
         XCTAssertTrue(plan.hasCreativeLUT)
@@ -30,14 +30,47 @@ final class ColorManagementTests: XCTestCase {
     func testTechnicalLUTRejectsMismatchedSourceEncoding() async throws {
         let technical = TestLUTFactory.identityLUT().configured(
             kind: .technical,
-            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .sRGB)
+            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .rec709)
         )
         let pipeline = ImagePipeline()
         do {
-            _ = try await pipeline.colorRenderPlan(source: .displayP3, technicalLUT: technical, creativeLUT: nil)
+            _ = try await pipeline.colorRenderPlan(source: .sRGB, technicalLUT: technical, creativeLUT: nil)
             XCTFail("Technical LUT must not apply to a mismatched source encoding")
         } catch let error as ColorManagementError {
             guard case .incompatibleTechnicalLUT = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
+    func testTechnicalLUTRejectsCrossEncodingEvenWhenSourceMatchesInput() async throws {
+        let technical = TestLUTFactory.identityLUT().configured(
+            kind: .technical,
+            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .sRGB)
+        )
+        let pipeline = ImagePipeline()
+
+        do {
+            _ = try await pipeline.colorRenderPlan(source: .rec709, technicalLUT: technical, creativeLUT: nil)
+            XCTFail("Cross-encoding Technical LUT must be rejected")
+        } catch let error as ColorManagementError {
+            guard case .crossEncodingTechnicalLUTUnsupported = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
+    func testTechnicalLUTRejectsUnsupportedSLog3Encoding() async throws {
+        let technical = TestLUTFactory.identityLUT().configured(
+            kind: .technical,
+            colorMetadata: LUTColorMetadata(
+                inputEncoding: ColorEncodingDescriptor(primaries: .sonySGamut3, transferFunction: .sLog3),
+                outputEncoding: ColorEncodingDescriptor(primaries: .sonySGamut3, transferFunction: .sLog3)
+            )
+        )
+        let pipeline = ImagePipeline()
+
+        do {
+            _ = try await pipeline.colorRenderPlan(source: .sRGB, technicalLUT: technical, creativeLUT: nil)
+            XCTFail("Unsupported S-Log3 encoding must be rejected")
+        } catch let error as ColorManagementError {
+            guard case .unsupportedLUTEncoding = error else { return XCTFail("Unexpected error: \(error)") }
         }
     }
 

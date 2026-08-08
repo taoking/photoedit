@@ -52,12 +52,28 @@ struct RAWImageSource: @unchecked Sendable {
             filter.neutralTemperature = resolved.temperature
             filter.neutralTint = resolved.tint
         }
-        if filter.isLuminanceNoiseReductionSupported { filter.luminanceNoiseReductionAmount = Float(adjustments.luminanceNoiseReduction.clamped(to: 0...1)) }
-        if filter.isColorNoiseReductionSupported { filter.colorNoiseReductionAmount = Float(adjustments.colorNoiseReduction.clamped(to: 0...1)) }
-        if filter.isSharpnessSupported { filter.sharpnessAmount = Float(adjustments.sharpness.clamped(to: 0...1)) }
-        if filter.isDetailSupported { filter.detailAmount = Float(adjustments.detail.clamped(to: 0...3)) }
-        if filter.isLocalToneMapSupported { filter.localToneMapAmount = Float(adjustments.localTone.clamped(to: 0...1)) }
-        if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = adjustments.lensCorrectionEnabled }
+        // 除曝光和相对 WB 外，RAW slider 的初始状态是「未覆盖」而非数值 0。只有用户
+        // 实际移动滑杆或切换开关后才写入 CIRAWFilter，从而保留相机 / decoder 的默认 NR、
+        // 锐化、细节、局部色调和镜头校正策略。
+        let overrides = adjustments.decoderOverrides
+        if filter.isLuminanceNoiseReductionSupported, let value = overrides.luminanceNoiseReduction {
+            filter.luminanceNoiseReductionAmount = value
+        }
+        if filter.isColorNoiseReductionSupported, let value = overrides.colorNoiseReduction {
+            filter.colorNoiseReductionAmount = value
+        }
+        if filter.isSharpnessSupported, let value = overrides.sharpness {
+            filter.sharpnessAmount = value
+        }
+        if filter.isDetailSupported, let value = overrides.detail {
+            filter.detailAmount = value
+        }
+        if filter.isLocalToneMapSupported, let value = overrides.localTone {
+            filter.localToneMapAmount = value
+        }
+        if filter.isLensCorrectionSupported, let value = overrides.lensCorrectionEnabled {
+            filter.isLensCorrectionEnabled = value
+        }
         guard let output = filter.outputImage else { throw ImageEditorError.renderFailed }
         return output
     }
