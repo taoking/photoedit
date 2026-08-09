@@ -44,6 +44,41 @@ final class ImagePipelineTests: XCTestCase {
         assertPixelsEqual(pixelBytes(base), pixelBytes(output), tolerance: 1)
     }
 
+    func testRec709TechnicalIdentityLUTMatchesBaseRender() async throws {
+        let rec709Source = Self.profiledImage(
+            red: 0.22,
+            green: 0.48,
+            blue: 0.83,
+            width: 1024,
+            height: 640,
+            colorSpace: .rec709
+        )
+        let pipeline = ImagePipeline()
+        let base = try await pipeline.render(
+            image: rec709Source,
+            state: .initial,
+            lut: nil,
+            sourceColorSpace: .rec709,
+            mode: .preview(maximumDimension: 256)
+        )
+        let technical = TestLUTFactory.identityLUT().configured(
+            kind: .technical,
+            colorMetadata: LUTColorMetadata(inputColorSpace: .rec709, outputColorSpace: .rec709)
+        )
+        let output = try await pipeline.render(
+            image: rec709Source,
+            state: .initial,
+            lut: nil,
+            technicalLUT: technical,
+            sourceColorSpace: .rec709,
+            mode: .preview(maximumDimension: 256)
+        )
+
+        XCTAssertEqual(base.width, output.width)
+        XCTAssertEqual(base.height, output.height)
+        assertPixelsEqual(pixelBytes(base), pixelBytes(output), tolerance: 1)
+    }
+
     func testPreviewDownsamplesButFullExportDoesNot() async throws {
         let pipeline = ImagePipeline()
         let preview = try await pipeline.render(image: source, state: .initial, lut: nil, mode: .preview(maximumDimension: 256))
@@ -192,8 +227,15 @@ final class ImagePipelineTests: XCTestCase {
         return Array(UnsafeBufferPointer(start: bytes, count: CFDataGetLength(data)))
     }
 
-    private static func profiledImage(red: CGFloat, green: CGFloat, blue: CGFloat, width: Int, height: Int) -> CIImage {
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    private static func profiledImage(
+        red: CGFloat,
+        green: CGFloat,
+        blue: CGFloat,
+        width: Int,
+        height: Int,
+        colorSpace descriptor: ColorSpaceDescriptor = .sRGB
+    ) -> CIImage {
+        let colorSpace = descriptor.cgColorSpace
         let source = CIImage(color: CIColor(red: red, green: green, blue: blue, alpha: 1))
             .cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
         let cgImage = CIContext().createCGImage(source, from: source.extent, format: .RGBA8, colorSpace: colorSpace)!

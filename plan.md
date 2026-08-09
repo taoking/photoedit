@@ -925,3 +925,4 @@ RAW + Batch
 - [x] Phase 7 — 局部调整
 - [x] Phase 8 — 视频 LUT
 - [x] Phase 8.5 — Correctness & Real-world Validation（最终审查修复完成；最低 iOS 26.0）
+- [x] Phase 8.5 RAW Reset hotfix — 统一 RAW 默认状态、补回归与 Rec.709 Technical LUT 像素级验证

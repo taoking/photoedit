@@ -148,9 +148,10 @@ final class EditorViewModel: ObservableObject {
     }
 
     func reset() {
-        guard state != .initial else { return }
+        let defaultState = Self.defaultState(for: asset)
+        guard state != defaultState else { return }
         undoStack.append(state)
-        state.reset()
+        state = defaultState
         lutPreviewCache.clear()
         schedulePreviewRender()
     }
@@ -490,16 +491,26 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    private func install(asset: ImageAsset) {
+    /// 安装与重置都必须依据资产类型建立默认状态：RAW 资产需要保留独立的 RAW
+    /// decode state，不能在全局重置后变成普通图片状态。
+    func install(asset: ImageAsset, scheduleRendering: Bool = true) {
         self.asset = asset
-        state = .initial
+        state = Self.defaultState(for: asset)
         selectedLocalAdjustmentID = nil
-        if asset.isRAW { state.raw = RAWAdjustments() }
         undoStack.removeAll()
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
+        guard scheduleRendering else { return }
         renderOriginalPreview()
         schedulePreviewRender()
+    }
+
+    static func defaultState(for asset: ImageAsset?) -> EditState {
+        var state = EditState.initial
+        if asset?.isRAW == true {
+            state.raw = RAWAdjustments()
+        }
+        return state
     }
 
     private func beginLoading() -> Int {

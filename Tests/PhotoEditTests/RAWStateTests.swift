@@ -1,7 +1,81 @@
+import CoreGraphics
+import CoreImage
 import XCTest
 @testable import PhotoEdit
 
+@MainActor
 final class RAWStateTests: XCTestCase {
+    func testResetPreservesRAWStateAndClearsAllAdjustments() {
+        let model = EditorViewModel()
+        model.install(asset: Self.rawAsset(), scheduleRendering: false)
+        XCTAssertTrue(model.asset?.isRAW == true)
+        XCTAssertEqual(model.state.raw, RAWAdjustments())
+
+        model.update { state in
+            state.light.exposure = 1.25
+            state.color.saturation = 42
+            state.hsl.red.luminance = -25
+            var curve = state.curves.blue
+            curve.movePoint(id: "end", x: 1, y: 0.6)
+            state.curves.blue = curve
+            state.lut.selectedLUTID = UUID()
+            state.lut.technicalLUTID = UUID()
+            state.lut.intensity = 0.4
+            state.localAdjustments = [.linear()]
+            state.transform.rotation = 90
+            state.transform.horizontalFlip = true
+            state.raw?.exposure = 2
+            state.raw?.temperature = 30
+            state.raw?.tint = -12
+            state.raw?.luminanceNoiseReduction = 0.4
+            state.raw?.colorNoiseReduction = 0.3
+            state.raw?.sharpness = 0.6
+            state.raw?.detail = 1.2
+            state.raw?.localTone = 0.8
+            state.raw?.lensCorrectionEnabled = false
+        }
+
+        model.reset()
+
+        XCTAssertEqual(model.state, EditorViewModel.defaultState(for: model.asset))
+        guard let raw = model.state.raw else {
+            return XCTFail("RAW reset must retain RAW adjustments")
+        }
+        XCTAssertEqual(raw.temperature, 0)
+        XCTAssertEqual(raw.tint, 0)
+        XCTAssertNil(raw.decoderOverrides.luminanceNoiseReduction)
+        XCTAssertNil(raw.decoderOverrides.colorNoiseReduction)
+        XCTAssertNil(raw.decoderOverrides.sharpness)
+        XCTAssertNil(raw.decoderOverrides.detail)
+        XCTAssertNil(raw.decoderOverrides.localTone)
+        XCTAssertNil(raw.decoderOverrides.lensCorrectionEnabled)
+        XCTAssertEqual(model.state.light, LightAdjustments())
+        XCTAssertEqual(model.state.color, ColorAdjustments())
+        XCTAssertTrue(model.state.hsl.isIdentity)
+        XCTAssertTrue(model.state.curves.isIdentity)
+        XCTAssertEqual(model.state.lut, LUTAdjustment())
+        XCTAssertTrue(model.state.localAdjustments.isEmpty)
+        XCTAssertEqual(model.state.transform, TransformAdjustment())
+    }
+
+    func testDefaultStateForNonRAWAssetRemainsInitial() {
+        XCTAssertEqual(EditorViewModel.defaultState(for: Self.standardAsset()), .initial)
+    }
+
+    func testResetRAWStateRendersTheStandardPipeline() async throws {
+        let resetState = EditorViewModel.defaultState(for: Self.rawAsset())
+        let rendered = try await ImagePipeline().render(
+            image: Self.standardAsset().fullResolutionImage,
+            state: resetState,
+            lut: nil,
+            sourceColorSpace: .sRGB,
+            mode: .preview(maximumDimension: 24)
+        )
+        XCTAssertEqual(rendered.width, 24)
+        XCTAssertEqual(rendered.height, 24)
+        XCTAssertNotNil(resetState.raw)
+    }
+
     func testRAWAjustmentsAreCodableAndSeparateFromStandardAdjustments() throws {
         var state = EditState()
         state.light.exposure = 1
@@ -103,5 +177,25 @@ final class RAWStateTests: XCTestCase {
 
         let tiff: [CFString: Any] = [kCGImagePropertyTIFFDateTime: "2024:01:02 03:04:05"]
         XCTAssertNotNil(RAWImageSource.captureDate(exif: nil, tiff: tiff))
+    }
+
+    private static func standardAsset() -> ImageAsset {
+        let image = CIImage(color: CIColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 24, height: 24))
+        return ImageAsset(
+            id: UUID(), sourceName: "Test.jpg", fullResolutionImage: image, originalData: Data(),
+            pixelWidth: 24, pixelHeight: 24, metadata: [:], sourceType: .jpeg,
+            sourceColorSpace: .sRGB, sourceHeadroom: 1, rawSource: nil
+        )
+    }
+
+    private static func rawAsset() -> ImageAsset {
+        let standard = standardAsset()
+        return ImageAsset(
+            id: standard.id, sourceName: "Test.dng", fullResolutionImage: standard.fullResolutionImage, originalData: Data(),
+            pixelWidth: standard.pixelWidth, pixelHeight: standard.pixelHeight, metadata: [:], sourceType: .data,
+            sourceColorSpace: .sRGB, sourceHeadroom: 1,
+            rawSource: RAWImageSource(data: Data(), identifierHint: nil, metadata: CameraMetadata())
+        )
     }
 }
