@@ -42,17 +42,12 @@ struct EditorView: View {
     @State private var pan = CGSize.zero
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if model.asset == nil {
-                    importLanding
-                } else {
-                    editor
-                }
+        Group {
+            if model.asset == nil {
+                importLanding
+            } else {
+                editor
             }
-            .navigationTitle(model.asset == nil ? "PhotoEdit" : model.asset?.sourceName ?? "编辑")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbar }
         }
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
@@ -147,90 +142,116 @@ struct EditorView: View {
     }
 
     private var importLanding: some View {
-        ContentUnavailableView {
-            Label("导入照片开始编辑", systemImage: "photo.on.rectangle")
-        } description: {
-            Text("支持 JPEG、HEIC/HEIF 与 PNG。原始照片不会被修改。")
-        } actions: {
-            VStack(spacing: 12) {
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                    Label("从照片导入", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            ContentUnavailableView {
+                Label("导入照片开始编辑", systemImage: "photo.on.rectangle")
+                    .foregroundStyle(.white)
+            } description: {
+                Text("支持 JPEG、HEIC/HEIF 与 PNG。原始照片不会被修改。")
+                    .foregroundStyle(.white.opacity(0.72))
+            } actions: {
+                VStack(spacing: 12) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("从照片导入", systemImage: "photo")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button {
+                        showingImageImporter = true
+                    } label: {
+                        Label("从文件导入", systemImage: "folder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        showingVideoImporter = true
+                    } label: {
+                        Label("导入视频并套用 LUT", systemImage: "video")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
-                Button {
-                    showingImageImporter = true
-                } label: {
-                    Label("从文件导入", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                Button {
-                    showingVideoImporter = true
-                } label: {
-                    Label("导入视频并套用 LUT", systemImage: "video")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                .frame(maxWidth: 280)
             }
-            .frame(maxWidth: 280)
         }
     }
 
     private var editor: some View {
-        VStack(spacing: 0) {
-            GeometryReader { geometry in
-                ZStack {
-                    Color.black
-                    if model.isShowingReference, let reference = model.referencePreviewImage {
-                        HStack(spacing: 1) {
-                            DynamicRangeImage(image: reference)
-                                .aspectRatio(CGFloat(reference.width) / CGFloat(reference.height), contentMode: .fit)
-                                .accessibilityLabel("参考照片")
-                            if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                                DynamicRangeImage(image: image)
-                                    .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
-                                    .scaleEffect(zoom)
-                                    .offset(pan)
-                                    .gesture(imageGesture(in: geometry.size))
-                                    .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
-                            }
-                        }
-                    } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                        DynamicRangeImage(image: image)
-                            .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
-                            .scaleEffect(zoom)
-                            .offset(pan)
-                            .gesture(imageGesture(in: geometry.size))
-                            .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
-                    } else {
-                        ProgressView("正在准备预览")
-                            .tint(.white)
-                            .foregroundStyle(.white)
-                    }
-                    if model.isRendering && model.previewImage != nil {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding()
-                    }
-                    if model.usesHDRPreview {
-                        Label("HDR 预览", systemImage: "sun.max.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.black.opacity(0.55), in: Capsule())
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                            .padding()
-                    }
-                }
-                .clipShape(Rectangle())
-                .onTapGesture(count: 2) { withAnimation { zoom = 1; pan = .zero } }
-            }
-            .frame(maxHeight: .infinity)
+        GeometryReader { screen in
+            VStack(spacing: 0) {
+                editorToolbar
 
+                previewCanvas
+
+                editorControls
+            }
+            // `EditorView` 是 WindowGroup 的根视图；没有 NavigationStack 时，必须给
+            // VStack 一个确定的容器尺寸，否则内部 GeometryReader 只会取最小理想高度。
+            .frame(width: screen.size.width, height: screen.size.height, alignment: .top)
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+
+    private var previewCanvas: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                if model.isShowingReference, let reference = model.referencePreviewImage {
+                    HStack(spacing: 1) {
+                        DynamicRangeImage(image: reference)
+                            .frame(width: geometry.size.width / 2, height: geometry.size.height)
+                            .accessibilityLabel("参考照片")
+                        if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
+                            editablePreview(image, canvasSize: CGSize(width: geometry.size.width / 2, height: geometry.size.height))
+                        }
+                    }
+                } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
+                    editablePreview(image, canvasSize: geometry.size)
+                } else {
+                    ProgressView("正在准备预览")
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                }
+                if model.isRendering && model.previewImage != nil {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding()
+                }
+                if model.usesHDRPreview {
+                    Label("HDR 预览", systemImage: "sun.max.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding()
+                }
+            }
+            .clipShape(Rectangle())
+            .onTapGesture(count: 2) { withAnimation { zoom = 1; pan = .zero } }
+        }
+    }
+
+    private func editablePreview(_ image: CGImage, canvasSize: CGSize) -> some View {
+        DynamicRangeImage(image: image)
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .scaleEffect(zoom)
+            .offset(pan)
+            .contentShape(Rectangle())
+            .gesture(imageGesture(in: canvasSize))
+            .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
+    }
+
+    private var editorControls: some View {
+        VStack(spacing: 0) {
             Picker("工具", selection: $tool) {
                 ForEach(EditorTool.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.menu)
-            .padding([.horizontal, .top])
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+
+            Divider()
 
             Group {
                 switch tool {
@@ -263,52 +284,73 @@ struct EditorView: View {
             }
             .frame(height: 260)
         }
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
     }
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if model.asset != nil {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                Button {
-                    model.undo()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .disabled(!model.canUndo)
-                Button("重置") { model.reset() }
+    private var editorToolbar: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.undo()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Text("查看原图")
-                    .font(.caption)
-                    .onLongPressGesture(minimumDuration: 0.05, pressing: { isPressing in
-                        model.isShowingBefore = isPressing
-                    }, perform: {})
-                    .accessibilityHint("按住显示未编辑原图")
-                Button {
-                    showingExportOptions = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                Button {
+            .disabled(!model.canUndo)
+            .accessibilityLabel("撤销")
+
+            Button {
+                model.reset()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .accessibilityLabel("重置全部调整")
+
+            Image(systemName: "eye")
+                .frame(width: 32, height: 32)
+                .background(.white.opacity(0.16), in: Circle())
+                .onLongPressGesture(minimumDuration: 0.05, pressing: { isPressing in
+                    model.isShowingBefore = isPressing
+                }, perform: {})
+                .accessibilityLabel("查看原图")
+                .accessibilityHint("按住显示未编辑原图")
+
+            Spacer(minLength: 0)
+
+            Button {
+                showingExportOptions = true
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
+            .accessibilityLabel("导出")
+
+            Menu {
+                Button("导入视频并套用 LUT", systemImage: "video.badge.plus") {
                     showingVideoImporter = true
-                } label: {
-                    Image(systemName: "video.badge.plus")
                 }
-                Menu {
-                    Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
-                    Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
-                        model.pasteAdjustments()
-                    }
-                    .disabled(!model.adjustmentClipboard.hasAdjustments)
-                    Button("选择性粘贴", systemImage: "checklist") {
-                        showingSelectivePaste = true
-                    }
-                    .disabled(!model.adjustmentClipboard.hasAdjustments)
-                } label: {
-                    Image(systemName: "doc.on.doc")
+                Divider()
+                Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
+                Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
+                    model.pasteAdjustments()
                 }
+                .disabled(!model.adjustmentClipboard.hasAdjustments)
+                Button("选择性粘贴", systemImage: "checklist") {
+                    showingSelectivePaste = true
+                }
+                .disabled(!model.adjustmentClipboard.hasAdjustments)
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
         }
+        .buttonStyle(.bordered)
+        .tint(.white)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .frame(height: 44)
+        .background(.black.opacity(0.58), in: Capsule())
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
     private func imageGesture(in _: CGSize) -> some Gesture {

@@ -14,6 +14,8 @@ xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform
 xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
 ```
 
+真机首次签名、构建、安装与启动步骤见 [device-installation.md](docs/device-installation.md)。
+
 ## 当前色彩假设与限制
 
 Phase 6 使用 Extended Linear sRGB + half-float Core Image working space；SDR preview/export 明确输出 sRGB，而检测到真实 HDR 内容时可使用 EDR preview 和 10-bit HEIF Rec.2100 HLG 导出。为避免静默裁切高光，当前 HDR 照片仅允许 identity/基础安全链：HSL、曲线和所有 Color Cube LUT 都会明确禁用，直到具备经过验证的 extended-range 实现。每个 LUT 都必须声明类型、原色/色域和传递函数；Technical LUT 必须与实际源编码精确匹配，且当前仅支持输入与输出 encoding 完全相同的 LUT（例如 sRGB → sRGB、Rec.709 → Rec.709），不执行跨编码转换。S-Log3/S-Gamut3(.Cine)、LogC、PQ、HLG Technical conversion 等尚未实现且会被拒绝。RAW 的零色温/色调是相对相机 as-shot 白平衡的零增量，不会强制 6500 K；新 RAW 状态未触碰的 NR、锐化、细节、局部色调和镜头校正也会保留 CIRAWFilter decoder 默认值。旧版本 RAW JSON 中已存的数值无法区分 UI 默认值与手动设置，因此为保留已有编辑结果会迁移为显式覆盖。详见 [color-management.md](docs/color-management.md)、[hdr-workflow.md](docs/hdr-workflow.md)、[local-adjustments.md](docs/local-adjustments.md) 与 [real-world-validation.md](docs/real-world-validation.md)。
