@@ -3,16 +3,9 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private enum EditorTool: String, CaseIterable, Identifiable {
-    case adjust = "基本"
-    case hsl = "HSL"
-    case curves = "曲线"
-    case presets = "预设"
-    case raw = "RAW"
-    case batch = "批量"
-    case lut = "LUT"
-    case local = "局部"
-    case crop = "裁切"
+private enum EditorSecondarySurface: String, Identifiable {
+    case presets
+    case batch
 
     var id: String { rawValue }
 }
@@ -37,9 +30,13 @@ struct EditorView: View {
     @State private var showingBatchImporter = false
     @State private var showingReferenceImporter = false
     @State private var showingBatchExportOptions = false
-    @State private var tool: EditorTool = .adjust
+    @State private var secondarySurface: EditorSecondarySurface?
+    @State private var tool: EditorTool = .light
+    @State private var isParameterPanelExpanded = false
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
+    @GestureState private var gestureMagnification: CGFloat = 1
+    @GestureState private var gestureTranslation = CGSize.zero
 
     var body: some View {
         Group {
@@ -49,6 +46,10 @@ struct EditorView: View {
                 editor
             }
         }
+        // WindowGroup 根部使用条件视图时，两个分支都必须明确占用可用窗口。
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .preferredColorScheme(.dark)
+        .tint(.cyan)
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task {
@@ -60,6 +61,12 @@ struct EditorView: View {
                 } catch {
                     model.errorMessage = error.localizedDescription
                 }
+            }
+        }
+        .onChange(of: model.asset?.id) { _, _ in
+            resetViewport()
+            if tool == .raw, model.asset?.isRAW != true {
+                tool = .light
             }
         }
         .fileImporter(
@@ -123,6 +130,19 @@ struct EditorView: View {
         .sheet(isPresented: $showingSelectivePaste) {
             SelectivePasteView(model: model)
         }
+        .sheet(item: $secondarySurface) { surface in
+            NavigationStack {
+                secondarySurfaceContent(surface)
+                    .navigationTitle(surface == .presets ? "预设" : "批量处理")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { secondarySurface = nil }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .alert("发生错误", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -180,24 +200,87 @@ struct EditorView: View {
 
     private var editor: some View {
         GeometryReader { screen in
-            VStack(spacing: 0) {
-                editorToolbar
-
+            ZStack {
                 previewCanvas
+                    // 根视图没有 NavigationStack；显式占满 WindowGroup，避免
+                    // GeometryReader 以最小理想高度居中，造成预览和工具栏被截断。
+                    .frame(width: screen.size.width, height: screen.size.height, alignment: .center)
 
-                editorControls
+                VStack(spacing: 0) {
+                    editorToolbar
+                        .padding(.horizontal, 12)
+                        .padding(.top, screen.safeAreaInsets.top + 8)
+                        .padding(.bottom, 6)
+
+                    Spacer(minLength: 0)
+
+                    editorControls
+                        .padding(.bottom, screen.safeAreaInsets.bottom)
+                        .background(Color.photoEditControlSurface)
+                }
+                .frame(width: screen.size.width, height: screen.size.height, alignment: .center)
             }
-            // `EditorView` 是 WindowGroup 的根视图；没有 NavigationStack 时，必须给
-            // VStack 一个确定的容器尺寸，否则内部 GeometryReader 只会取最小理想高度。
-            .frame(width: screen.size.width, height: screen.size.height, alignment: .top)
+            .foregroundStyle(.white)
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(Color.photoEditWorkspace.ignoresSafeArea())
+    }
+
+    private var editorToolbar: some View {
+        EditorTopBar(
+            canUndo: model.canUndo,
+            close: closeCurrentPhoto,
+            undo: model.undo,
+            export: { showingExportOptions = true },
+            setShowingBefore: { model.isShowingBefore = $0 }
+        ) {
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label("从照片重新导入", systemImage: "photo")
+            }
+            Button("从文件重新导入", systemImage: "folder") {
+                showingImageImporter = true
+            }
+            Divider()
+            Button("预设", systemImage: "slider.horizontal.3") {
+                secondarySurface = .presets
+            }
+            Button("批量处理", systemImage: "photo.stack") {
+                secondarySurface = .batch
+            }
+            Button("载入参考照片", systemImage: "rectangle.split.2x1") {
+                showingReferenceImporter = true
+            }
+            if model.referencePreviewImage != nil {
+                Button(model.isShowingReference ? "关闭参考图" : "显示参考图", systemImage: "rectangle.split.2x1") {
+                    model.isShowingReference.toggle()
+                }
+            }
+            Divider()
+            Button("导入视频并套用 LUT", systemImage: "video.badge.plus") {
+                showingVideoImporter = true
+            }
+            Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
+            Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
+                model.pasteAdjustments()
+            }
+            .disabled(!model.adjustmentClipboard.hasAdjustments)
+            Button("选择性粘贴", systemImage: "checklist") {
+                showingSelectivePaste = true
+            }
+            .disabled(!model.adjustmentClipboard.hasAdjustments)
+            Divider()
+            Button("重置全部调整", systemImage: "arrow.counterclockwise", role: .destructive) {
+                model.reset()
+            }
+            Button("关闭当前照片", systemImage: "xmark", role: .destructive) {
+                closeCurrentPhoto()
+            }
+        }
     }
 
     private var previewCanvas: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.black
+                Color.photoEditWorkspace
                 if model.isShowingReference, let reference = model.referencePreviewImage {
                     HStack(spacing: 1) {
                         DynamicRangeImage(image: reference)
@@ -228,139 +311,161 @@ struct EditorView: View {
                 }
             }
             .clipShape(Rectangle())
-            .onTapGesture(count: 2) { withAnimation { zoom = 1; pan = .zero } }
+            .onTapGesture(count: 2) { withAnimation { resetViewport() } }
         }
     }
 
     private func editablePreview(_ image: CGImage, canvasSize: CGSize) -> some View {
-        DynamicRangeImage(image: image)
+        let scale = displayedZoom
+        return DynamicRangeImage(image: image)
             .frame(width: canvasSize.width, height: canvasSize.height)
-            .scaleEffect(zoom)
-            .offset(pan)
+            .scaleEffect(scale)
+            .offset(clampedPan(pan.adding(gestureTranslation), image: image, canvasSize: canvasSize, scale: scale))
             .contentShape(Rectangle())
-            .gesture(imageGesture(in: canvasSize))
+            .gesture(imageGesture(for: image, in: canvasSize))
             .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
     }
 
     private var editorControls: some View {
         VStack(spacing: 0) {
-            Picker("工具", selection: $tool) {
-                ForEach(EditorTool.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            Group {
-                switch tool {
-                case .adjust: AdjustmentPanel(model: model)
-                case .hsl: HSLPanel(model: model)
-                case .curves: ToneCurvePanel(model: model)
-                case .presets:
-                    PresetPanel(
-                        model: model,
-                        showingImporter: $showingPresetImporter,
-                        exportPreset: { id, name in
-                            guard let data = try? model.presetRepository.exportData(id: id) else { return }
-                            presetDocument = PresetDocument(data: data)
-                            presetFilename = name + ".json"
-                            showingPresetFileExporter = true
-                        }
-                    )
-                case .raw: RAWPanel(model: model)
-                case .batch:
-                    BatchPanel(
-                        model: model,
-                        showingImporter: $showingBatchImporter,
-                        showingReferenceImporter: $showingReferenceImporter,
-                        showingExportOptions: $showingBatchExportOptions
-                    )
-                case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
-                case .local: LocalAdjustmentsPanel(model: model)
-                case .crop: CropPanel(model: model)
+            if isParameterPanelExpanded {
+                EditorParameterPanel(tool: tool, collapse: toggleParameterPanel) {
+                    parameterPanelContent
                 }
+                .frame(height: parameterPanelHeight)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(height: 260)
+
+            EditorToolRail(
+                tools: availableTools,
+                selection: $tool,
+                selectTool: selectTool
+            )
         }
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .padding(.horizontal, 8)
-        .padding(.bottom, 8)
+        .background(Color.photoEditControlSurface)
+        .overlay(alignment: .top) { Divider().overlay(.white.opacity(0.1)) }
     }
 
-    private var editorToolbar: some View {
-        HStack(spacing: 6) {
-            Button {
-                model.undo()
-            } label: {
-                Image(systemName: "arrow.uturn.backward")
-            }
-            .disabled(!model.canUndo)
-            .accessibilityLabel("撤销")
-
-            Button {
-                model.reset()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-            }
-            .accessibilityLabel("重置全部调整")
-
-            Image(systemName: "eye")
-                .frame(width: 32, height: 32)
-                .background(.white.opacity(0.16), in: Circle())
-                .onLongPressGesture(minimumDuration: 0.05, pressing: { isPressing in
-                    model.isShowingBefore = isPressing
-                }, perform: {})
-                .accessibilityLabel("查看原图")
-                .accessibilityHint("按住显示未编辑原图")
-
-            Spacer(minLength: 0)
-
-            Button {
-                showingExportOptions = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .accessibilityLabel("导出")
-
-            Menu {
-                Button("导入视频并套用 LUT", systemImage: "video.badge.plus") {
-                    showingVideoImporter = true
-                }
-                Divider()
-                Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
-                Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
-                    model.pasteAdjustments()
-                }
-                .disabled(!model.adjustmentClipboard.hasAdjustments)
-                Button("选择性粘贴", systemImage: "checklist") {
-                    showingSelectivePaste = true
-                }
-                .disabled(!model.adjustmentClipboard.hasAdjustments)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
+    @ViewBuilder
+    private var parameterPanelContent: some View {
+        switch tool {
+        case .light: LightPanel(model: model)
+        case .color: ColorPanel(model: model)
+        case .detail: DetailPanel(model: model)
+        case .hsl: HSLPanel(model: model)
+        case .curves: ToneCurvePanel(model: model)
+        case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
+        case .crop: CropPanel(model: model)
+        case .local: LocalAdjustmentsPanel(model: model)
+        case .raw: RAWPanel(model: model)
         }
-        .buttonStyle(.bordered)
-        .tint(.white)
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-        .background(.black.opacity(0.58), in: Capsule())
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
     }
 
-    private func imageGesture(in _: CGSize) -> some Gesture {
+    private var availableTools: [EditorTool] {
+        EditorTool.allCases.filter { $0 != .raw || model.asset?.isRAW == true }
+    }
+
+    private var parameterPanelHeight: CGFloat {
+        switch tool {
+        case .light, .color: 214
+        case .detail: 184
+        case .hsl: 204
+        case .curves, .lut: 230
+        case .crop: 202
+        case .local, .raw: 240
+        }
+    }
+
+    private var displayedZoom: CGFloat {
+        (zoom * gestureMagnification).clamped(to: 1...5)
+    }
+
+    private func selectTool(_ newTool: EditorTool) {
+        tool = newTool
+        if !isParameterPanelExpanded {
+            withAnimation(.easeInOut(duration: 0.2)) { isParameterPanelExpanded = true }
+        }
+    }
+
+    private func toggleParameterPanel() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isParameterPanelExpanded.toggle()
+        }
+    }
+
+    private func closeCurrentPhoto() {
+        selectedPhoto = nil
+        model.closeCurrentAsset()
+        tool = .light
+        isParameterPanelExpanded = false
+        resetViewport()
+    }
+
+    private func resetViewport() {
+        zoom = 1
+        pan = .zero
+    }
+
+    private func imageGesture(for image: CGImage, in canvasSize: CGSize) -> some Gesture {
         SimultaneousGesture(
             MagnificationGesture()
-                .onChanged { value in zoom = min(max(value, 1), 5) }
-                .onEnded { _ in if zoom < 1.02 { zoom = 1; pan = .zero } },
+                .updating($gestureMagnification) { value, state, _ in
+                    state = value
+                }
+                .onEnded { value in
+                    zoom = (zoom * value).clamped(to: 1...5)
+                    pan = clampedPan(pan, image: image, canvasSize: canvasSize, scale: zoom)
+                },
             DragGesture()
-                .onChanged { value in pan = value.translation }
+                .updating($gestureTranslation) { value, state, _ in
+                    state = value.translation
+                }
+                .onEnded { value in
+                    pan = clampedPan(pan.adding(value.translation), image: image, canvasSize: canvasSize, scale: displayedZoom)
+                }
         )
+    }
+
+    private func clampedPan(_ candidate: CGSize, image: CGImage, canvasSize: CGSize, scale: CGFloat) -> CGSize {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return .zero }
+        let imageAspect = CGFloat(image.width) / CGFloat(image.height)
+        let canvasAspect = canvasSize.width / canvasSize.height
+        let fittedSize: CGSize
+        if imageAspect > canvasAspect {
+            fittedSize = CGSize(width: canvasSize.width, height: canvasSize.width / imageAspect)
+        } else {
+            fittedSize = CGSize(width: canvasSize.height * imageAspect, height: canvasSize.height)
+        }
+        let maximumX = max(0, (fittedSize.width * scale - canvasSize.width) / 2)
+        let maximumY = max(0, (fittedSize.height * scale - canvasSize.height) / 2)
+        return CGSize(
+            width: candidate.width.clamped(to: -maximumX...maximumX),
+            height: candidate.height.clamped(to: -maximumY...maximumY)
+        )
+    }
+
+    @ViewBuilder
+    private func secondarySurfaceContent(_ surface: EditorSecondarySurface) -> some View {
+        switch surface {
+        case .presets:
+            PresetPanel(
+                model: model,
+                showingImporter: $showingPresetImporter,
+                exportPreset: { id, name in
+                    guard let data = try? model.presetRepository.exportData(id: id) else { return }
+                    presetDocument = PresetDocument(data: data)
+                    presetFilename = name + ".json"
+                    showingPresetFileExporter = true
+                }
+            )
+        case .batch:
+            BatchPanel(
+                model: model,
+                showingImporter: $showingBatchImporter,
+                showingReferenceImporter: $showingReferenceImporter,
+                showingExportOptions: $showingBatchExportOptions
+            )
+        }
     }
 
     private var supportedImageTypes: [UTType] {
@@ -407,6 +512,18 @@ struct EditorView: View {
         case let .success(url): model.importPreset(url: url)
         case let .failure(error): model.errorMessage = error.localizedDescription
         }
+    }
+}
+
+private extension CGSize {
+    func adding(_ other: CGSize) -> CGSize {
+        CGSize(width: width + other.width, height: height + other.height)
+    }
+}
+
+private extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -505,7 +622,7 @@ private struct AdjustmentPanel: View {
     }
 }
 
-private struct HistogramView: View {
+struct HistogramView: View {
     let histogram: Histogram
 
     var body: some View {

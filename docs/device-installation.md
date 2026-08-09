@@ -1,6 +1,6 @@
 # 真机安装
 
-本项目的最低运行版本为 iOS 26.0。下面的步骤适用于使用 Xcode 26.6+ 将 Debug 版本安装到已连接的 iPhone；不会把个人 Apple 团队标识或签名资料写入仓库。
+本项目的最低运行版本为 iOS 26.0。下面的步骤适用于使用 Xcode 26.6+ 将 Debug 版本安装到已连接的 iPhone；不会把个人 Apple 团队标识或签名资料写入仓库。工程已经配置 `AppIcon` 资源目录，执行构建时会自动把正式的 1024 × 1024 不透明图标编译进应用，无需在 Xcode 中手工替换图标；`Info.plist` 的 `UILaunchScreen` 也必须保留，否则系统可能以 320 × 480 兼容模式启动并使编辑器无法全屏。
 
 ## 首次准备
 
@@ -37,7 +37,7 @@ export PHOTOEDIT_BUILD_DIR='/tmp/photoedit-device-build'
 
 xcrun devicectl device info details --device "$PHOTOEDIT_DEVICE_ID"
 
-# 仅在 project.yml 改动后需要重新生成工程。
+# 仅在 project.yml 或 AppIcon 资源配置改动后需要重新生成工程。
 xcodegen generate
 
 xcodebuild \
@@ -85,3 +85,5 @@ xcrun devicectl device process launch \
 - 已安装但无法打开：先确认 Developer Mode，再按上一节信任开发者；不要删除其他应用或更换其 Bundle ID/profile 来绕过系统签名检查。
 
 安装成功后，请按 [real-world-validation.md](real-world-validation.md) 在真机检查 Photos 权限、真实 RAW、HDR、导出与视频工作流。
+
+同时请在 iPhone 上导入一张竖幅和一张横幅照片，检查默认收起状态的全图预览、底部工具横向滚动、展开/收起参数，以及连续双指缩放和拖拽的边界。模拟器无法替代这项多点手势与真实照片显示验证。
