@@ -3,16 +3,9 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private enum EditorTool: String, CaseIterable, Identifiable {
-    case adjust = "基本"
-    case hsl = "HSL"
-    case curves = "曲线"
-    case presets = "预设"
-    case raw = "RAW"
-    case batch = "批量"
-    case lut = "LUT"
-    case local = "局部"
-    case crop = "裁切"
+private enum EditorSecondarySurface: String, Identifiable {
+    case presets
+    case batch
 
     var id: String { rawValue }
 }
@@ -37,23 +30,27 @@ struct EditorView: View {
     @State private var showingBatchImporter = false
     @State private var showingReferenceImporter = false
     @State private var showingBatchExportOptions = false
-    @State private var tool: EditorTool = .adjust
+    @State private var secondarySurface: EditorSecondarySurface?
+    @State private var tool: EditorTool = .light
+    @State private var isParameterPanelExpanded = false
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
+    @State private var previewCanvasSize = CGSize.zero
+    @GestureState private var gestureMagnification: CGFloat = 1
+    @GestureState private var gestureTranslation = CGSize.zero
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if model.asset == nil {
-                    importLanding
-                } else {
-                    editor
-                }
+        Group {
+            if model.asset == nil {
+                importLanding
+            } else {
+                editor
             }
-            .navigationTitle(model.asset == nil ? "PhotoEdit" : model.asset?.sourceName ?? "编辑")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbar }
         }
+        // WindowGroup 根部使用条件视图时，两个分支都必须明确占用可用窗口。
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .preferredColorScheme(.dark)
+        .tint(.cyan)
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task {
@@ -66,6 +63,15 @@ struct EditorView: View {
                     model.errorMessage = error.localizedDescription
                 }
             }
+        }
+        .onChange(of: model.asset?.id) { _, _ in
+            resetViewport()
+            if tool == .raw, model.asset?.isRAW != true {
+                tool = .light
+            }
+        }
+        .onChange(of: model.isShowingReference) { _, _ in
+            revalidateViewport(in: previewCanvasSize)
         }
         .fileImporter(
             isPresented: $showingImageImporter,
@@ -128,6 +134,19 @@ struct EditorView: View {
         .sheet(isPresented: $showingSelectivePaste) {
             SelectivePasteView(model: model)
         }
+        .sheet(item: $secondarySurface) { surface in
+            NavigationStack {
+                secondarySurfaceContent(surface)
+                    .navigationTitle(surface == .presets ? "预设" : "批量处理")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("完成") { secondarySurface = nil }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .alert("发生错误", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -147,178 +166,346 @@ struct EditorView: View {
     }
 
     private var importLanding: some View {
-        ContentUnavailableView {
-            Label("导入照片开始编辑", systemImage: "photo.on.rectangle")
-        } description: {
-            Text("支持 JPEG、HEIC/HEIF 与 PNG。原始照片不会被修改。")
-        } actions: {
-            VStack(spacing: 12) {
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                    Label("从照片导入", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            ContentUnavailableView {
+                Label("导入照片开始编辑", systemImage: "photo.on.rectangle")
+                    .foregroundStyle(.white)
+            } description: {
+                Text("支持 JPEG、HEIC/HEIF 与 PNG。原始照片不会被修改。")
+                    .foregroundStyle(.white.opacity(0.72))
+            } actions: {
+                VStack(spacing: 12) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("从照片导入", systemImage: "photo")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button {
+                        showingImageImporter = true
+                    } label: {
+                        Label("从文件导入", systemImage: "folder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        showingVideoImporter = true
+                    } label: {
+                        Label("导入视频并套用 LUT", systemImage: "video")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
-                Button {
-                    showingImageImporter = true
-                } label: {
-                    Label("从文件导入", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                Button {
-                    showingVideoImporter = true
-                } label: {
-                    Label("导入视频并套用 LUT", systemImage: "video")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                .frame(maxWidth: 280)
             }
-            .frame(maxWidth: 280)
         }
     }
 
     private var editor: some View {
+        GeometryReader { screen in
+            VStack(spacing: 0) {
+                editorToolbar
+                    .padding(.horizontal, 12)
+                    .padding(.top, screen.safeAreaInsets.top + 8)
+                    .padding(.bottom, 6)
+
+                // 预览只占用工具栏和控制区之间实际可见的工作区，绝不在控件下方延伸。
+                previewCanvas
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                editorControls(availableHeight: screen.size.height - screen.safeAreaInsets.top - screen.safeAreaInsets.bottom)
+                    .padding(.bottom, screen.safeAreaInsets.bottom)
+                    .background(Color.photoEditControlSurface)
+            }
+            // 根视图没有 NavigationStack；明确填满 WindowGroup，避免 GeometryReader
+            // 以最小理想高度居中，造成预览或工具栏被截断。
+            .frame(width: screen.size.width, height: screen.size.height, alignment: .top)
+            .background(Color.photoEditWorkspace)
+            .foregroundStyle(.white)
+        }
+        .background(Color.photoEditWorkspace.ignoresSafeArea())
+    }
+
+    private var editorToolbar: some View {
+        EditorTopBar(
+            canUndo: model.canUndo,
+            close: closeCurrentPhoto,
+            undo: model.undo,
+            export: { showingExportOptions = true },
+            setShowingBefore: { model.isShowingBefore = $0 }
+        ) {
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label("从照片重新导入", systemImage: "photo")
+            }
+            Button("从文件重新导入", systemImage: "folder") {
+                showingImageImporter = true
+            }
+            Divider()
+            Button("预设", systemImage: "slider.horizontal.3") {
+                secondarySurface = .presets
+            }
+            Button("批量处理", systemImage: "photo.stack") {
+                secondarySurface = .batch
+            }
+            Button("载入参考照片", systemImage: "rectangle.split.2x1") {
+                showingReferenceImporter = true
+            }
+            if model.referencePreviewImage != nil {
+                Button(model.isShowingReference ? "关闭参考图" : "显示参考图", systemImage: "rectangle.split.2x1") {
+                    model.isShowingReference.toggle()
+                }
+            }
+            Divider()
+            Button("导入视频并套用 LUT", systemImage: "video.badge.plus") {
+                showingVideoImporter = true
+            }
+            Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
+            Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
+                model.pasteAdjustments()
+            }
+            .disabled(!model.adjustmentClipboard.hasAdjustments)
+            Button("选择性粘贴", systemImage: "checklist") {
+                showingSelectivePaste = true
+            }
+            .disabled(!model.adjustmentClipboard.hasAdjustments)
+            Divider()
+            Button("重置全部调整", systemImage: "arrow.counterclockwise", role: .destructive) {
+                model.reset()
+            }
+            Button("关闭当前照片", systemImage: "xmark", role: .destructive) {
+                closeCurrentPhoto()
+            }
+        }
+    }
+
+    private var previewCanvas: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.photoEditWorkspace
+                if model.isShowingReference, let reference = model.referencePreviewImage {
+                    let splitWidth = Swift.max(0, (geometry.size.width - 1) / 2)
+                    let splitCanvasSize = CGSize(width: splitWidth, height: geometry.size.height)
+                    HStack(spacing: 1) {
+                        fittedPreview(reference, canvasSize: splitCanvasSize, accessibilityLabel: "参考照片")
+                        if let image = displayedPreviewImage {
+                            editablePreview(image, canvasSize: splitCanvasSize)
+                        }
+                    }
+                } else if let image = displayedPreviewImage {
+                    editablePreview(image, canvasSize: geometry.size)
+                } else {
+                    ProgressView("正在准备预览")
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                }
+                if model.isRendering && model.previewImage != nil {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding()
+                }
+                if model.usesHDRPreview {
+                    Label("HDR 预览", systemImage: "sun.max.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding()
+                }
+            }
+            .clipShape(Rectangle())
+            .onTapGesture(count: 2) { withAnimation { resetViewport() } }
+            .onAppear {
+                previewCanvasSize = geometry.size
+                revalidateViewport(in: geometry.size)
+            }
+            .onChange(of: geometry.size) { _, size in
+                previewCanvasSize = size
+                revalidateViewport(in: size)
+            }
+        }
+    }
+
+    private var displayedPreviewImage: CGImage? {
+        model.isShowingBefore ? model.originalPreviewImage : model.previewImage
+    }
+
+    private func fittedPreview(_ image: CGImage, canvasSize: CGSize, accessibilityLabel: String) -> some View {
+        let fittedSize = PreviewGeometry.aspectFitSize(
+            imageSize: CGSize(width: image.width, height: image.height),
+            in: canvasSize
+        )
+
+        return DynamicRangeImage(image: image)
+            // UIKit 视图只占等比适配后的图像矩形，仍使用 .scaleAspectFit 保留 HDR 预览。
+            .frame(width: fittedSize.width, height: fittedSize.height)
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func editablePreview(_ image: CGImage, canvasSize: CGSize) -> some View {
+        let imageSize = CGSize(width: image.width, height: image.height)
+        let fittedSize = PreviewGeometry.aspectFitSize(imageSize: imageSize, in: canvasSize)
+        let scale = displayedZoom
+        return DynamicRangeImage(image: image)
+            // 将 representable 明确限制在适配后的图像矩形；外层只提供裁切和手势区域。
+            .frame(width: fittedSize.width, height: fittedSize.height)
+            .scaleEffect(scale)
+            .offset(clampedPan(pan.adding(gestureTranslation), imageSize: imageSize, canvasSize: canvasSize, scale: scale))
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(imageGesture(for: imageSize, in: canvasSize))
+            .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
+    }
+
+    private func editorControls(availableHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
-            GeometryReader { geometry in
-                ZStack {
-                    Color.black
-                    if model.isShowingReference, let reference = model.referencePreviewImage {
-                        HStack(spacing: 1) {
-                            DynamicRangeImage(image: reference)
-                                .aspectRatio(CGFloat(reference.width) / CGFloat(reference.height), contentMode: .fit)
-                                .accessibilityLabel("参考照片")
-                            if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                                DynamicRangeImage(image: image)
-                                    .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
-                                    .scaleEffect(zoom)
-                                    .offset(pan)
-                                    .gesture(imageGesture(in: geometry.size))
-                                    .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
-                            }
-                        }
-                    } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                        DynamicRangeImage(image: image)
-                            .aspectRatio(CGFloat(image.width) / CGFloat(image.height), contentMode: .fit)
-                            .scaleEffect(zoom)
-                            .offset(pan)
-                            .gesture(imageGesture(in: geometry.size))
-                            .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
-                    } else {
-                        ProgressView("正在准备预览")
-                            .tint(.white)
-                            .foregroundStyle(.white)
-                    }
-                    if model.isRendering && model.previewImage != nil {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding()
-                    }
-                    if model.usesHDRPreview {
-                        Label("HDR 预览", systemImage: "sun.max.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.black.opacity(0.55), in: Capsule())
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                            .padding()
-                    }
+            if isParameterPanelExpanded {
+                EditorParameterPanel(tool: tool, collapse: toggleParameterPanel) {
+                    parameterPanelContent
                 }
-                .clipShape(Rectangle())
-                .onTapGesture(count: 2) { withAnimation { zoom = 1; pan = .zero } }
+                .frame(height: parameterPanelHeight(for: availableHeight))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(maxHeight: .infinity)
 
-            Picker("工具", selection: $tool) {
-                ForEach(EditorTool.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .padding([.horizontal, .top])
+            EditorToolRail(
+                tools: availableTools,
+                selection: $tool,
+                selectTool: selectTool
+            )
+        }
+        .background(Color.photoEditControlSurface)
+        .overlay(alignment: .top) { Divider().overlay(.white.opacity(0.1)) }
+    }
 
-            Group {
-                switch tool {
-                case .adjust: AdjustmentPanel(model: model)
-                case .hsl: HSLPanel(model: model)
-                case .curves: ToneCurvePanel(model: model)
-                case .presets:
-                    PresetPanel(
-                        model: model,
-                        showingImporter: $showingPresetImporter,
-                        exportPreset: { id, name in
-                            guard let data = try? model.presetRepository.exportData(id: id) else { return }
-                            presetDocument = PresetDocument(data: data)
-                            presetFilename = name + ".json"
-                            showingPresetFileExporter = true
-                        }
-                    )
-                case .raw: RAWPanel(model: model)
-                case .batch:
-                    BatchPanel(
-                        model: model,
-                        showingImporter: $showingBatchImporter,
-                        showingReferenceImporter: $showingReferenceImporter,
-                        showingExportOptions: $showingBatchExportOptions
-                    )
-                case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
-                case .local: LocalAdjustmentsPanel(model: model)
-                case .crop: CropPanel(model: model)
-                }
-            }
-            .frame(height: 260)
+    @ViewBuilder
+    private var parameterPanelContent: some View {
+        switch tool {
+        case .light: LightPanel(model: model)
+        case .color: ColorPanel(model: model)
+        case .detail: DetailPanel(model: model)
+        case .hsl: HSLPanel(model: model)
+        case .curves: ToneCurvePanel(model: model)
+        case .lut: LUTPanel(model: model, showingImporter: $showingLUTImporter)
+        case .crop: CropPanel(model: model)
+        case .local: LocalAdjustmentsPanel(model: model)
+        case .raw: RAWPanel(model: model)
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if model.asset != nil {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                Button {
-                    model.undo()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .disabled(!model.canUndo)
-                Button("重置") { model.reset() }
-            }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Text("查看原图")
-                    .font(.caption)
-                    .onLongPressGesture(minimumDuration: 0.05, pressing: { isPressing in
-                        model.isShowingBefore = isPressing
-                    }, perform: {})
-                    .accessibilityHint("按住显示未编辑原图")
-                Button {
-                    showingExportOptions = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                Button {
-                    showingVideoImporter = true
-                } label: {
-                    Image(systemName: "video.badge.plus")
-                }
-                Menu {
-                    Button("复制全部调整", systemImage: "doc.on.doc") { model.copyAllAdjustments() }
-                    Button("粘贴全部调整", systemImage: "doc.on.clipboard") {
-                        model.pasteAdjustments()
-                    }
-                    .disabled(!model.adjustmentClipboard.hasAdjustments)
-                    Button("选择性粘贴", systemImage: "checklist") {
-                        showingSelectivePaste = true
-                    }
-                    .disabled(!model.adjustmentClipboard.hasAdjustments)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-            }
+    private var availableTools: [EditorTool] {
+        EditorTool.allCases.filter { $0 != .raw || model.asset?.isRAW == true }
+    }
+
+    private func parameterPanelHeight(for availableHeight: CGFloat) -> CGFloat {
+        let preferredHeight: CGFloat = switch tool {
+        case .light, .color: 214
+        case .detail: 184
+        case .hsl: 204
+        case .curves, .lut: 230
+        case .crop: 202
+        case .local, .raw: 240
+        }
+
+        // 横屏时参数区不应吞掉照片工作区；纵屏仍保持各面板的完整常用高度。
+        guard availableHeight.isFinite, availableHeight > 0 else { return preferredHeight }
+        let adaptiveLimit = Swift.max(132, Swift.min(260, availableHeight * 0.32))
+        return Swift.min(preferredHeight, adaptiveLimit)
+    }
+
+    private var displayedZoom: CGFloat {
+        (zoom * gestureMagnification).clamped(to: 1...5)
+    }
+
+    private func selectTool(_ newTool: EditorTool) {
+        tool = newTool
+        if !isParameterPanelExpanded {
+            withAnimation(.easeInOut(duration: 0.2)) { isParameterPanelExpanded = true }
         }
     }
 
-    private func imageGesture(in _: CGSize) -> some Gesture {
+    private func toggleParameterPanel() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isParameterPanelExpanded.toggle()
+        }
+    }
+
+    private func closeCurrentPhoto() {
+        selectedPhoto = nil
+        model.closeCurrentAsset()
+        tool = .light
+        isParameterPanelExpanded = false
+        resetViewport()
+    }
+
+    private func resetViewport() {
+        zoom = 1
+        pan = .zero
+    }
+
+    private func imageGesture(for imageSize: CGSize, in canvasSize: CGSize) -> some Gesture {
         SimultaneousGesture(
             MagnificationGesture()
-                .onChanged { value in zoom = min(max(value, 1), 5) }
-                .onEnded { _ in if zoom < 1.02 { zoom = 1; pan = .zero } },
+                .updating($gestureMagnification) { value, state, _ in
+                    state = value
+                }
+                .onEnded { value in
+                    zoom = (zoom * value).clamped(to: 1...5)
+                    pan = clampedPan(pan, imageSize: imageSize, canvasSize: canvasSize, scale: zoom)
+                },
             DragGesture()
-                .onChanged { value in pan = value.translation }
+                .updating($gestureTranslation) { value, state, _ in
+                    state = value.translation
+                }
+                .onEnded { value in
+                    pan = clampedPan(pan.adding(value.translation), imageSize: imageSize, canvasSize: canvasSize, scale: displayedZoom)
+                }
         )
+    }
+
+    private func revalidateViewport(in canvasSize: CGSize) {
+        guard let image = displayedPreviewImage else {
+            pan = .zero
+            return
+        }
+        let visibleCanvasSize = model.isShowingReference
+            ? CGSize(width: Swift.max(0, (canvasSize.width - 1) / 2), height: canvasSize.height)
+            : canvasSize
+        pan = clampedPan(
+            pan,
+            imageSize: CGSize(width: image.width, height: image.height),
+            canvasSize: visibleCanvasSize,
+            scale: zoom
+        )
+    }
+
+    private func clampedPan(_ candidate: CGSize, imageSize: CGSize, canvasSize: CGSize, scale: CGFloat) -> CGSize {
+        let fittedSize = PreviewGeometry.aspectFitSize(imageSize: imageSize, in: canvasSize)
+        return PreviewGeometry.clampedPan(candidate, fittedImageSize: fittedSize, in: canvasSize, zoom: scale)
+    }
+
+    @ViewBuilder
+    private func secondarySurfaceContent(_ surface: EditorSecondarySurface) -> some View {
+        switch surface {
+        case .presets:
+            PresetPanel(
+                model: model,
+                showingImporter: $showingPresetImporter,
+                exportPreset: { id, name in
+                    guard let data = try? model.presetRepository.exportData(id: id) else { return }
+                    presetDocument = PresetDocument(data: data)
+                    presetFilename = name + ".json"
+                    showingPresetFileExporter = true
+                }
+            )
+        case .batch:
+            BatchPanel(
+                model: model,
+                showingImporter: $showingBatchImporter,
+                showingReferenceImporter: $showingReferenceImporter,
+                showingExportOptions: $showingBatchExportOptions
+            )
+        }
     }
 
     private var supportedImageTypes: [UTType] {
@@ -368,9 +555,27 @@ struct EditorView: View {
     }
 }
 
+private extension CGSize {
+    func adding(_ other: CGSize) -> CGSize {
+        CGSize(width: width + other.width, height: height + other.height)
+    }
+}
+
+private extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
 /// `UIImageView` 明确请求 high dynamic range；SDR 图片在该视图中保持原样。
 private struct DynamicRangeImage: UIViewRepresentable {
     let image: CGImage
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView _: UIImageView, context _: Context) -> CGSize? {
+        // 接受 `editablePreview` 计算出的 fitted frame，而不是让 UIImageView 以原图的
+        // intrinsic pixel size 布局；后者会被外层画布裁切成只显示中间局部。
+        PreviewGeometry.representedViewSize(width: proposal.width, height: proposal.height)
+    }
 
     func makeUIView(context _: Context) -> UIImageView {
         let imageView = UIImageView()
@@ -382,88 +587,15 @@ private struct DynamicRangeImage: UIViewRepresentable {
 
     func updateUIView(_ imageView: UIImageView, context _: Context) {
         imageView.image = UIImage(cgImage: image)
+        // SwiftUI 可能复用 representable；每次更新都重申内容模式，确保显式的
+        // fitted frame 内仍按图像原始比例显示，而非被复用视图拉伸。
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
         imageView.preferredImageDynamicRange = .high
     }
 }
 
-private struct AdjustmentPanel: View {
-    @ObservedObject var model: EditorViewModel
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                adjustmentSection("光线") {
-                    slider("曝光", value: light(\.exposure), range: -5...5, suffix: " EV")
-                    slider("对比度", value: light(\.contrast), range: -100...100)
-                    slider("高光", value: light(\.highlights), range: -100...100)
-                    slider("阴影", value: light(\.shadows), range: -100...100)
-                }
-                adjustmentSection("颜色") {
-                    slider("色温", value: color(\.temperature), range: -100...100)
-                    slider("色调", value: color(\.tint), range: -100...100)
-                    slider("饱和度", value: color(\.saturation), range: -100...100)
-                    slider("自然饱和度", value: color(\.vibrance), range: -100...100)
-                }
-                adjustmentSection("细节与效果") {
-                    slider("锐化", value: detail(\.sharpness), range: 0...100)
-                    slider("暗角", value: effects(\.vignette), range: -100...100)
-                }
-                HistogramView(histogram: model.histogram)
-                    .frame(height: 64)
-                    .accessibilityLabel("RGB 和亮度直方图")
-            }
-            .padding()
-        }
-    }
-
-    private func adjustmentSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            content()
-        }
-    }
-
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, suffix: String = "") -> some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(value.wrappedValue, format: .number.precision(.fractionLength(range.upperBound == 5 ? 1 : 0)))\(suffix)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            Slider(value: value, in: range, onEditingChanged: { editing in
-                if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
-            })
-        }
-    }
-
-    private func light(_ keyPath: WritableKeyPath<LightAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.light[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.light[keyPath: keyPath] = value }
-        })
-    }
-
-    private func color(_ keyPath: WritableKeyPath<ColorAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.color[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.color[keyPath: keyPath] = value }
-        })
-    }
-
-    private func detail(_ keyPath: WritableKeyPath<DetailAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.detail[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.detail[keyPath: keyPath] = value }
-        })
-    }
-
-    private func effects(_ keyPath: WritableKeyPath<EffectAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.effects[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.effects[keyPath: keyPath] = value }
-        })
-    }
-}
-
-private struct HistogramView: View {
+struct HistogramView: View {
     let histogram: Histogram
 
     var body: some View {

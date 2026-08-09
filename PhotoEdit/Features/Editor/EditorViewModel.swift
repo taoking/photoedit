@@ -32,6 +32,7 @@ final class EditorViewModel: ObservableObject {
 
     private let pipeline: ImagePipeline
     private var renderTask: Task<Void, Never>?
+    private var originalPreviewTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
     private var batchTask: Task<Void, Never>?
     private var histogramTask: Task<Void, Never>?
@@ -58,6 +59,7 @@ final class EditorViewModel: ObservableObject {
 
     deinit {
         renderTask?.cancel()
+        originalPreviewTask?.cancel()
         loadTask?.cancel()
         exportTask?.cancel()
         batchTask?.cancel()
@@ -154,6 +156,31 @@ final class EditorViewModel: ObservableObject {
         state = defaultState
         lutPreviewCache.clear()
         schedulePreviewRender()
+    }
+
+    /// 返回导入页。编辑状态和预览属于当前照片，不能在下一次导入时短暂显示旧内容。
+    func closeCurrentAsset() {
+        loadTask?.cancel()
+        renderTask?.cancel()
+        originalPreviewTask?.cancel()
+        histogramTask?.cancel()
+        referenceTask?.cancel()
+        exportTask?.cancel()
+        loadGeneration += 1
+        renderGeneration += 1
+        asset = nil
+        state = .initial
+        previewImage = nil
+        originalPreviewImage = nil
+        referencePreviewImage = nil
+        isShowingReference = false
+        selectedLocalAdjustmentID = nil
+        histogram = .empty
+        isRendering = false
+        isExporting = false
+        undoStack.removeAll()
+        pendingContinuousUndo = nil
+        lutPreviewCache.clear()
     }
 
     func addLocalAdjustment(mask: LocalMask) {
@@ -516,7 +543,11 @@ final class EditorViewModel: ObservableObject {
     private func beginLoading() -> Int {
         loadTask?.cancel()
         cancelRender()
+        originalPreviewTask?.cancel()
         loadGeneration += 1
+        previewImage = nil
+        originalPreviewImage = nil
+        histogram = .empty
         isRendering = true
         return loadGeneration
     }
@@ -547,7 +578,9 @@ final class EditorViewModel: ObservableObject {
 
     private func renderOriginalPreview() {
         guard let asset else { return }
-        Task { [weak self, pipeline, asset] in
+        originalPreviewTask?.cancel()
+        let assetID = asset.id
+        originalPreviewTask = Task { [weak self, pipeline, asset, assetID] in
             let image = try? await pipeline.render(
                 asset: asset,
                 state: .initial,
@@ -555,6 +588,7 @@ final class EditorViewModel: ObservableObject {
                 dynamicRange: asset.hasHDRContent ? .hdr : .sdr,
                 mode: .preview(maximumDimension: 2048)
             )
+            guard !Task.isCancelled, self?.asset?.id == assetID else { return }
             self?.originalPreviewImage = image
         }
     }

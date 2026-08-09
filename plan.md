@@ -926,3 +926,8 @@ RAW + Batch
 - [x] Phase 8 — 视频 LUT
 - [x] Phase 8.5 — Correctness & Real-world Validation（最终审查修复完成；最低 iOS 26.0）
 - [x] Phase 8.5 RAW Reset hotfix — 统一 RAW 默认状态、补回归与 Rec.709 Technical LUT 像素级验证
+- [x] Phase 8.5 iPhone 16 Pro usability hotfix — 修复导入预览尺寸与全屏布局，并完成真机安装验证
+- [x] Phase 8.5 iPhone 16 Pro preview-layout regression — 修复无导航容器下 GeometryReader 被压缩导致的预览截断与工具栏换行
+- [x] Phase 8.5 iPhone editor UX redesign — 重构照片优先的编辑信息架构、可收起参数面板、连续手势与 AppIcon；模拟器已截图检查，真机多点手势与真实照片显示仍须手动确认
+- [x] Phase 8.5 iPhone preview-fit review fixes — 使预览按可见编辑视口适配，统一缩放/平移几何并补回归测试；已通过模拟器截图与构建验证，iPhone 已安装但因锁屏无法远程启动，连续手势仍待解锁后手动确认
+- [x] Phase 8.5 iPhone 真机预览裁切修复 — 让 HDR `UIImageView` 接受 SwiftUI 的等比适配尺寸；已通过 76 项测试、iPhone 16 Pro 实际导入竖图截图与真机安装验证，待推送

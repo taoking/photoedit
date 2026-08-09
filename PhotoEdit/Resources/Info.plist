@@ -26,6 +26,8 @@
     <string>PhotoEdit needs permission to save your edited photos.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>PhotoEdit needs permission to import photos for editing.</string>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
