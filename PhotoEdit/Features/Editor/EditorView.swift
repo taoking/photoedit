@@ -35,6 +35,7 @@ struct EditorView: View {
     @State private var isParameterPanelExpanded = false
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
+    @State private var previewCanvasSize = CGSize.zero
     @GestureState private var gestureMagnification: CGFloat = 1
     @GestureState private var gestureTranslation = CGSize.zero
 
@@ -68,6 +69,9 @@ struct EditorView: View {
             if tool == .raw, model.asset?.isRAW != true {
                 tool = .light
             }
+        }
+        .onChange(of: model.isShowingReference) { _, _ in
+            revalidateViewport(in: previewCanvasSize)
         }
         .fileImporter(
             isPresented: $showingImageImporter,
@@ -200,26 +204,24 @@ struct EditorView: View {
 
     private var editor: some View {
         GeometryReader { screen in
-            ZStack {
+            VStack(spacing: 0) {
+                editorToolbar
+                    .padding(.horizontal, 12)
+                    .padding(.top, screen.safeAreaInsets.top + 8)
+                    .padding(.bottom, 6)
+
+                // 预览只占用工具栏和控制区之间实际可见的工作区，绝不在控件下方延伸。
                 previewCanvas
-                    // 根视图没有 NavigationStack；显式占满 WindowGroup，避免
-                    // GeometryReader 以最小理想高度居中，造成预览和工具栏被截断。
-                    .frame(width: screen.size.width, height: screen.size.height, alignment: .center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                VStack(spacing: 0) {
-                    editorToolbar
-                        .padding(.horizontal, 12)
-                        .padding(.top, screen.safeAreaInsets.top + 8)
-                        .padding(.bottom, 6)
-
-                    Spacer(minLength: 0)
-
-                    editorControls
-                        .padding(.bottom, screen.safeAreaInsets.bottom)
-                        .background(Color.photoEditControlSurface)
-                }
-                .frame(width: screen.size.width, height: screen.size.height, alignment: .center)
+                editorControls(availableHeight: screen.size.height - screen.safeAreaInsets.top - screen.safeAreaInsets.bottom)
+                    .padding(.bottom, screen.safeAreaInsets.bottom)
+                    .background(Color.photoEditControlSurface)
             }
+            // 根视图没有 NavigationStack；明确填满 WindowGroup，避免 GeometryReader
+            // 以最小理想高度居中，造成预览或工具栏被截断。
+            .frame(width: screen.size.width, height: screen.size.height, alignment: .top)
+            .background(Color.photoEditWorkspace)
             .foregroundStyle(.white)
         }
         .background(Color.photoEditWorkspace.ignoresSafeArea())
@@ -282,15 +284,15 @@ struct EditorView: View {
             ZStack {
                 Color.photoEditWorkspace
                 if model.isShowingReference, let reference = model.referencePreviewImage {
+                    let splitWidth = Swift.max(0, (geometry.size.width - 1) / 2)
+                    let splitCanvasSize = CGSize(width: splitWidth, height: geometry.size.height)
                     HStack(spacing: 1) {
-                        DynamicRangeImage(image: reference)
-                            .frame(width: geometry.size.width / 2, height: geometry.size.height)
-                            .accessibilityLabel("参考照片")
-                        if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
-                            editablePreview(image, canvasSize: CGSize(width: geometry.size.width / 2, height: geometry.size.height))
+                        fittedPreview(reference, canvasSize: splitCanvasSize, accessibilityLabel: "参考照片")
+                        if let image = displayedPreviewImage {
+                            editablePreview(image, canvasSize: splitCanvasSize)
                         }
                     }
-                } else if let image = model.isShowingBefore ? model.originalPreviewImage : model.previewImage {
+                } else if let image = displayedPreviewImage {
                     editablePreview(image, canvasSize: geometry.size)
                 } else {
                     ProgressView("正在准备预览")
@@ -312,27 +314,57 @@ struct EditorView: View {
             }
             .clipShape(Rectangle())
             .onTapGesture(count: 2) { withAnimation { resetViewport() } }
+            .onAppear {
+                previewCanvasSize = geometry.size
+                revalidateViewport(in: geometry.size)
+            }
+            .onChange(of: geometry.size) { _, size in
+                previewCanvasSize = size
+                revalidateViewport(in: size)
+            }
         }
     }
 
+    private var displayedPreviewImage: CGImage? {
+        model.isShowingBefore ? model.originalPreviewImage : model.previewImage
+    }
+
+    private func fittedPreview(_ image: CGImage, canvasSize: CGSize, accessibilityLabel: String) -> some View {
+        let fittedSize = PreviewGeometry.aspectFitSize(
+            imageSize: CGSize(width: image.width, height: image.height),
+            in: canvasSize
+        )
+
+        return DynamicRangeImage(image: image)
+            // UIKit 视图只占等比适配后的图像矩形，仍使用 .scaleAspectFit 保留 HDR 预览。
+            .frame(width: fittedSize.width, height: fittedSize.height)
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
     private func editablePreview(_ image: CGImage, canvasSize: CGSize) -> some View {
+        let imageSize = CGSize(width: image.width, height: image.height)
+        let fittedSize = PreviewGeometry.aspectFitSize(imageSize: imageSize, in: canvasSize)
         let scale = displayedZoom
         return DynamicRangeImage(image: image)
-            .frame(width: canvasSize.width, height: canvasSize.height)
+            // 将 representable 明确限制在适配后的图像矩形；外层只提供裁切和手势区域。
+            .frame(width: fittedSize.width, height: fittedSize.height)
             .scaleEffect(scale)
-            .offset(clampedPan(pan.adding(gestureTranslation), image: image, canvasSize: canvasSize, scale: scale))
+            .offset(clampedPan(pan.adding(gestureTranslation), imageSize: imageSize, canvasSize: canvasSize, scale: scale))
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .clipped()
             .contentShape(Rectangle())
-            .gesture(imageGesture(for: image, in: canvasSize))
+            .gesture(imageGesture(for: imageSize, in: canvasSize))
             .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
     }
 
-    private var editorControls: some View {
+    private func editorControls(availableHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
             if isParameterPanelExpanded {
                 EditorParameterPanel(tool: tool, collapse: toggleParameterPanel) {
                     parameterPanelContent
                 }
-                .frame(height: parameterPanelHeight)
+                .frame(height: parameterPanelHeight(for: availableHeight))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -365,8 +397,8 @@ struct EditorView: View {
         EditorTool.allCases.filter { $0 != .raw || model.asset?.isRAW == true }
     }
 
-    private var parameterPanelHeight: CGFloat {
-        switch tool {
+    private func parameterPanelHeight(for availableHeight: CGFloat) -> CGFloat {
+        let preferredHeight: CGFloat = switch tool {
         case .light, .color: 214
         case .detail: 184
         case .hsl: 204
@@ -374,6 +406,11 @@ struct EditorView: View {
         case .crop: 202
         case .local, .raw: 240
         }
+
+        // 横屏时参数区不应吞掉照片工作区；纵屏仍保持各面板的完整常用高度。
+        guard availableHeight.isFinite, availableHeight > 0 else { return preferredHeight }
+        let adaptiveLimit = Swift.max(132, Swift.min(260, availableHeight * 0.32))
+        return Swift.min(preferredHeight, adaptiveLimit)
     }
 
     private var displayedZoom: CGFloat {
@@ -406,7 +443,7 @@ struct EditorView: View {
         pan = .zero
     }
 
-    private func imageGesture(for image: CGImage, in canvasSize: CGSize) -> some Gesture {
+    private func imageGesture(for imageSize: CGSize, in canvasSize: CGSize) -> some Gesture {
         SimultaneousGesture(
             MagnificationGesture()
                 .updating($gestureMagnification) { value, state, _ in
@@ -414,34 +451,37 @@ struct EditorView: View {
                 }
                 .onEnded { value in
                     zoom = (zoom * value).clamped(to: 1...5)
-                    pan = clampedPan(pan, image: image, canvasSize: canvasSize, scale: zoom)
+                    pan = clampedPan(pan, imageSize: imageSize, canvasSize: canvasSize, scale: zoom)
                 },
             DragGesture()
                 .updating($gestureTranslation) { value, state, _ in
                     state = value.translation
                 }
                 .onEnded { value in
-                    pan = clampedPan(pan.adding(value.translation), image: image, canvasSize: canvasSize, scale: displayedZoom)
+                    pan = clampedPan(pan.adding(value.translation), imageSize: imageSize, canvasSize: canvasSize, scale: displayedZoom)
                 }
         )
     }
 
-    private func clampedPan(_ candidate: CGSize, image: CGImage, canvasSize: CGSize, scale: CGFloat) -> CGSize {
-        guard canvasSize.width > 0, canvasSize.height > 0 else { return .zero }
-        let imageAspect = CGFloat(image.width) / CGFloat(image.height)
-        let canvasAspect = canvasSize.width / canvasSize.height
-        let fittedSize: CGSize
-        if imageAspect > canvasAspect {
-            fittedSize = CGSize(width: canvasSize.width, height: canvasSize.width / imageAspect)
-        } else {
-            fittedSize = CGSize(width: canvasSize.height * imageAspect, height: canvasSize.height)
+    private func revalidateViewport(in canvasSize: CGSize) {
+        guard let image = displayedPreviewImage else {
+            pan = .zero
+            return
         }
-        let maximumX = max(0, (fittedSize.width * scale - canvasSize.width) / 2)
-        let maximumY = max(0, (fittedSize.height * scale - canvasSize.height) / 2)
-        return CGSize(
-            width: candidate.width.clamped(to: -maximumX...maximumX),
-            height: candidate.height.clamped(to: -maximumY...maximumY)
+        let visibleCanvasSize = model.isShowingReference
+            ? CGSize(width: Swift.max(0, (canvasSize.width - 1) / 2), height: canvasSize.height)
+            : canvasSize
+        pan = clampedPan(
+            pan,
+            imageSize: CGSize(width: image.width, height: image.height),
+            canvasSize: visibleCanvasSize,
+            scale: zoom
         )
+    }
+
+    private func clampedPan(_ candidate: CGSize, imageSize: CGSize, canvasSize: CGSize, scale: CGFloat) -> CGSize {
+        let fittedSize = PreviewGeometry.aspectFitSize(imageSize: imageSize, in: canvasSize)
+        return PreviewGeometry.clampedPan(candidate, fittedImageSize: fittedSize, in: canvasSize, zoom: scale)
     }
 
     @ViewBuilder
@@ -541,84 +581,11 @@ private struct DynamicRangeImage: UIViewRepresentable {
 
     func updateUIView(_ imageView: UIImageView, context _: Context) {
         imageView.image = UIImage(cgImage: image)
+        // SwiftUI 可能复用 representable；每次更新都重申内容模式，确保显式的
+        // fitted frame 内仍按图像原始比例显示，而非被复用视图拉伸。
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
         imageView.preferredImageDynamicRange = .high
-    }
-}
-
-private struct AdjustmentPanel: View {
-    @ObservedObject var model: EditorViewModel
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                adjustmentSection("光线") {
-                    slider("曝光", value: light(\.exposure), range: -5...5, suffix: " EV")
-                    slider("对比度", value: light(\.contrast), range: -100...100)
-                    slider("高光", value: light(\.highlights), range: -100...100)
-                    slider("阴影", value: light(\.shadows), range: -100...100)
-                }
-                adjustmentSection("颜色") {
-                    slider("色温", value: color(\.temperature), range: -100...100)
-                    slider("色调", value: color(\.tint), range: -100...100)
-                    slider("饱和度", value: color(\.saturation), range: -100...100)
-                    slider("自然饱和度", value: color(\.vibrance), range: -100...100)
-                }
-                adjustmentSection("细节与效果") {
-                    slider("锐化", value: detail(\.sharpness), range: 0...100)
-                    slider("暗角", value: effects(\.vignette), range: -100...100)
-                }
-                HistogramView(histogram: model.histogram)
-                    .frame(height: 64)
-                    .accessibilityLabel("RGB 和亮度直方图")
-            }
-            .padding()
-        }
-    }
-
-    private func adjustmentSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            content()
-        }
-    }
-
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, suffix: String = "") -> some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(value.wrappedValue, format: .number.precision(.fractionLength(range.upperBound == 5 ? 1 : 0)))\(suffix)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            Slider(value: value, in: range, onEditingChanged: { editing in
-                if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
-            })
-        }
-    }
-
-    private func light(_ keyPath: WritableKeyPath<LightAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.light[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.light[keyPath: keyPath] = value }
-        })
-    }
-
-    private func color(_ keyPath: WritableKeyPath<ColorAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.color[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.color[keyPath: keyPath] = value }
-        })
-    }
-
-    private func detail(_ keyPath: WritableKeyPath<DetailAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.detail[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.detail[keyPath: keyPath] = value }
-        })
-    }
-
-    private func effects(_ keyPath: WritableKeyPath<EffectAdjustments, Double>) -> Binding<Double> {
-        Binding(get: { model.state.effects[keyPath: keyPath] }, set: { value in
-            model.updateContinuous { $0.effects[keyPath: keyPath] = value }
-        })
     }
 }
 

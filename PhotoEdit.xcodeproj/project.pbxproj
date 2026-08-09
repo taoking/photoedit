@@ -31,6 +31,7 @@
 		692FD988104D6EA99E4CCB45 /* VideoEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */; };
 		6C920B2BA6F209DD0993E7CF /* ImageAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF61BBC4CB543268C98A760C /* ImageAsset.swift */; };
 		6E44030B34AEA6B5F1A2BAEF /* CUBEParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0331CA37E856171BB2D3F821 /* CUBEParserTests.swift */; };
+		73A1298CB6FF7A1A88CCEEFE /* EditorPreviewGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A487360829FF393366AD85 /* EditorPreviewGeometryTests.swift */; };
 		89A0C66FE772C974F8974736 /* HSLProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D299608943594CCCBA636A /* HSLProcessor.swift */; };
 		912861023625EB1F952D98BA /* VideoEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08B42002C7552E42DA34566 /* VideoEditingTests.swift */; };
 		94BEFB05A72C76CCBAD1B6DA /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8706CA9D5A39A92A7EDAD53F /* EditorView.swift */; };
@@ -38,6 +39,7 @@
 		A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5764FA663230295540E60D4B /* LUTRepositoryTests.swift */; };
 		B494F13F2841F13EDF21CD31 /* LUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */; };
 		B4F9AC4370A419692834A614 /* VideoEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A080219CCFAE906C4BF449A /* VideoEditing.swift */; };
+		B5A3411CF8857B18F91921A0 /* PreviewGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B7FE97F7E637613A4BE842 /* PreviewGeometry.swift */; };
 		C9A88F47EEC1ECFC2D78A54C /* LocalAdjustmentProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510B2CCC1CE0FDA3A8C6D436 /* LocalAdjustmentProcessor.swift */; };
 		CE37DFEC0040B890125E940F /* LUTProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE15D5900BBF77A86C1919B /* LUTProcessor.swift */; };
 		CFE097000B25BE070797F881 /* PhotoEditApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FA3ACA8E090F59EF6AA225 /* PhotoEditApp.swift */; };
@@ -90,6 +92,7 @@
 		8706CA9D5A39A92A7EDAD53F /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8BEF67F7A9096F9B1E36C625 /* ToneCurveProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveProcessor.swift; sourceTree = "<group>"; };
 		8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditorView.swift; sourceTree = "<group>"; };
+		94A487360829FF393366AD85 /* EditorPreviewGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreviewGeometryTests.swift; sourceTree = "<group>"; };
 		A08B42002C7552E42DA34566 /* VideoEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditingTests.swift; sourceTree = "<group>"; };
 		A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUT.swift; sourceTree = "<group>"; };
 		C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagementTests.swift; sourceTree = "<group>"; };
@@ -101,6 +104,7 @@
 		E66E993FB58BF014855131BC /* EditState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditState.swift; sourceTree = "<group>"; };
 		E888947E33A2A9D08A294FA5 /* ColorManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagement.swift; sourceTree = "<group>"; };
 		E998E017A8A944327D98F0C3 /* HDRRendering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRRendering.swift; sourceTree = "<group>"; };
+		F0B7FE97F7E637613A4BE842 /* PreviewGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewGeometry.swift; sourceTree = "<group>"; };
 		F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipeline.swift; sourceTree = "<group>"; };
 		F7D991F48E455171230EDBD4 /* CUBEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CUBEParser.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -122,6 +126,7 @@
 				047E2AEF50C15C172E2F023F /* BatchWorkflowTests.swift */,
 				C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */,
 				0331CA37E856171BB2D3F821 /* CUBEParserTests.swift */,
+				94A487360829FF393366AD85 /* EditorPreviewGeometryTests.swift */,
 				602D6A07AAD8A96DF89F05A6 /* EditStateTests.swift */,
 				38563CD9109486D31D02CB00 /* HDRRenderingTests.swift */,
 				4485F1963C17129A1731684D /* ImagePipelineTests.swift */,
@@ -256,6 +261,7 @@
 				7DF6632886617E168F1C8845 /* EditorChrome.swift */,
 				8706CA9D5A39A92A7EDAD53F /* EditorView.swift */,
 				782C7F54CD612543B62468AE /* EditorViewModel.swift */,
+				F0B7FE97F7E637613A4BE842 /* PreviewGeometry.swift */,
 			);
 			path = Editor;
 			sourceTree = "<group>";
@@ -366,6 +372,7 @@
 				6E44030B34AEA6B5F1A2BAEF /* CUBEParserTests.swift in Sources */,
 				F879A1DD6B8DDC573EF7C6C9 /* ColorManagementTests.swift in Sources */,
 				59E5BD08BB057AD3E2E70AD0 /* EditStateTests.swift in Sources */,
+				73A1298CB6FF7A1A88CCEEFE /* EditorPreviewGeometryTests.swift in Sources */,
 				3B6FCE112AC1D6819CEFAEF2 /* HDRRenderingTests.swift in Sources */,
 				DD3C7BD568BEA21919B2F617 /* ImagePipelineTests.swift in Sources */,
 				A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */,
@@ -403,6 +410,7 @@
 				C9A88F47EEC1ECFC2D78A54C /* LocalAdjustmentProcessor.swift in Sources */,
 				CFE097000B25BE070797F881 /* PhotoEditApp.swift in Sources */,
 				2EB4E7AA9FCFF664191C1DED /* PresetRepository.swift in Sources */,
+				B5A3411CF8857B18F91921A0 /* PreviewGeometry.swift in Sources */,
 				08E312F792F11E95A2D0BA8B /* RAWImageSource.swift in Sources */,
 				52B763F2F9C7EB9EFA040EF3 /* ToneCurveProcessor.swift in Sources */,
 				B4F9AC4370A419692834A614 /* VideoEditing.swift in Sources */,

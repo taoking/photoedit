@@ -118,32 +118,40 @@ struct EditorToolRail: View {
     let selectTool: (EditorTool) -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(tools) { tool in
-                        Button {
-                            selectTool(tool)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: tool.symbolName)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(height: 20)
-                                Text(tool.title)
-                                    .font(.caption2.weight(.medium))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
+        ScrollViewReader { proxy in
+            HStack(spacing: 4) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(tools) { tool in
+                            Button {
+                                selectTool(tool)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: tool.symbolName)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(height: 20)
+                                    Text(tool.title)
+                                        .font(.caption2.weight(.medium))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                }
+                                .frame(width: 58, height: 54)
+                                .foregroundStyle(selection == tool ? Color.cyan : .white.opacity(0.62))
+                                .background(selection == tool ? Color.white.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
-                            .frame(width: 58, height: 54)
-                            .foregroundStyle(selection == tool ? Color.cyan : .white.opacity(0.62))
-                            .background(selection == tool ? Color.white.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(tool.title) 工具")
+                            .accessibilityAddTraits(selection == tool ? .isSelected : [])
+                            .id(tool)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(tool.title) 工具")
-                        .accessibilityAddTraits(selection == tool ? .isSelected : [])
                     }
+                    .padding(.horizontal, 8)
                 }
-                .padding(.horizontal, 8)
+            }
+            .onChange(of: selection) { _, tool in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(tool, anchor: .center)
+                }
             }
         }
         .frame(minHeight: 62)
