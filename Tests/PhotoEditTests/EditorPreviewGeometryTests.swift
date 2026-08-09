@@ -47,6 +47,19 @@ final class EditorPreviewGeometryTests: XCTestCase {
         )
     }
 
+    func testRepresentedViewSizeAcceptsOnlyExplicitFiniteProposal() {
+        XCTAssertEqual(
+            PreviewGeometry.representedViewSize(width: 390, height: 585),
+            CGSize(width: 390, height: 585)
+        )
+        XCTAssertEqual(
+            PreviewGeometry.representedViewSize(width: 0, height: 0),
+            .zero
+        )
+        XCTAssertNil(PreviewGeometry.representedViewSize(width: nil, height: 585))
+        XCTAssertNil(PreviewGeometry.representedViewSize(width: 390, height: CGFloat.nan))
+    }
+
     func testMaximumPanAtZoomOneIsAlwaysZero() {
         let fitted = PreviewGeometry.aspectFitSize(
             imageSize: CGSize(width: 4_000, height: 6_000),

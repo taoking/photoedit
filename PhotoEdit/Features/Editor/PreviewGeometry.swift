@@ -2,6 +2,24 @@ import Foundation
 
 /// 编辑预览的单一几何约定：图片始终先在可见画布内等比适配，再以该矩形计算缩放和平移边界。
 struct PreviewGeometry {
+    /// 将 SwiftUI 对 `UIViewRepresentable` 提出的明确尺寸传给 UIKit。
+    ///
+    /// `UIImageView` 的 intrinsic content size 是原始照片像素大小。若不接受这里的
+    /// proposal，SwiftUI 外层的 fitted frame 会裁切这个原始大小的 UIKit 视图，只剩
+    /// 图片中央的一部分可见。
+    static func representedViewSize(width: CGFloat?, height: CGFloat?) -> CGSize? {
+        guard let width,
+              let height,
+              width.isFinite,
+              height.isFinite,
+              width >= 0,
+              height >= 0 else {
+            return nil
+        }
+
+        return CGSize(width: width, height: height)
+    }
+
     static func aspectFitSize(imageSize: CGSize, in canvasSize: CGSize) -> CGSize {
         guard imageSize.width.isFinite,
               imageSize.height.isFinite,

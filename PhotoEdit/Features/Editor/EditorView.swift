@@ -571,6 +571,12 @@ private extension CGFloat {
 private struct DynamicRangeImage: UIViewRepresentable {
     let image: CGImage
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView _: UIImageView, context _: Context) -> CGSize? {
+        // 接受 `editablePreview` 计算出的 fitted frame，而不是让 UIImageView 以原图的
+        // intrinsic pixel size 布局；后者会被外层画布裁切成只显示中间局部。
+        PreviewGeometry.representedViewSize(width: proposal.width, height: proposal.height)
+    }
+
     func makeUIView(context _: Context) -> UIImageView {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFit
