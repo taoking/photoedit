@@ -953,4 +953,4 @@ Phase 9.0 发布交接：
 - [x] 补充已有签名安装包的 Xcode 图形界面手动安装步骤
 - [x] 补充 `devicectl` 命令行覆盖安装与 Personal Team 注意事项
 - [x] 将最终版本覆盖安装到已连接的 iPhone 16 Pro，并完成启动验证
-- [ ] 提交并推送 Phase 9.0 分支
+- [x] 提交并推送 Phase 9.0 分支
