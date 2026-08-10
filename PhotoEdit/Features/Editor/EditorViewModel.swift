@@ -141,6 +141,7 @@ final class EditorViewModel: ObservableObject {
     func update(_ change: (inout EditState) -> Void) {
         let previous = state
         change(&state)
+        state.canonicalize()
         guard state != previous else { return }
         if pendingContinuousUndo == nil { undoStack.append(previous) }
         lutPreviewCache.clear()
@@ -153,9 +154,12 @@ final class EditorViewModel: ObservableObject {
     }
 
     func updateContinuous(_ change: (inout EditState) -> Void) {
+        let previous = state
         change(&state)
+        state.canonicalize()
+        guard state != previous else { return }
         lutPreviewCache.clear()
-        schedulePreviewRender()
+        schedulePreviewRender(debounceNanoseconds: 16_000_000)
     }
 
     func endContinuousEdit() {
@@ -236,7 +240,7 @@ final class EditorViewModel: ObservableObject {
                 }.value
                 guard !Task.isCancelled, let self, self.loadGeneration == generation else { return }
                 self.install(asset: loaded, scheduleRendering: false, persistSession: false)
-                self.state = restored.record.state
+                self.state = restored.record.state.canonicalized()
                 self.activeSessionID = restored.record.id
                 self.hasRestorableSession = true
                 self.isRestoringSession = false
@@ -270,6 +274,13 @@ final class EditorViewModel: ObservableObject {
 
     func updateLocalAdjustment(id: UUID, change: (inout LocalAdjustment) -> Void) {
         update { state in
+            guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }) else { return }
+            change(&state.localAdjustments[index])
+        }
+    }
+
+    func updateLocalAdjustmentContinuous(id: UUID, change: (inout LocalAdjustment) -> Void) {
+        updateContinuous { state in
             guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }) else { return }
             change(&state.localAdjustments[index])
         }
@@ -378,7 +389,7 @@ final class EditorViewModel: ObservableObject {
     func pasteAdjustments(groups: Set<AdjustmentGroup> = Set(AdjustmentGroup.allCases)) {
         guard let pasted = adjustmentClipboard.paste(into: state, groups: groups), pasted != state else { return }
         undoStack.append(state)
-        state = pasted
+        state = pasted.canonicalized()
         lutPreviewCache.clear()
         schedulePreviewRender()
     }
@@ -396,7 +407,7 @@ final class EditorViewModel: ObservableObject {
         let applied = preset.payload.applying(to: state)
         guard applied != state else { return }
         undoStack.append(state)
-        state = applied
+        state = applied.canonicalized()
         recentSettings.record(preset: id)
         lutPreviewCache.clear()
         schedulePreviewRender()
@@ -560,14 +571,14 @@ final class EditorViewModel: ObservableObject {
 
     func applyCopiedAdjustmentsToBatch() -> Bool {
         guard let copied = adjustmentClipboard.paste(into: .initial) else { return false }
-        batchState = copied
+        batchState = copied.canonicalized()
         batchAdjustmentSource = "已复制的调整"
         return true
     }
 
     func applyPresetToBatch(id: UUID) {
         guard let preset = presetRepository.preset(id: id) else { return }
-        batchState = preset.payload.applying(to: .initial)
+        batchState = preset.payload.applying(to: .initial).canonicalized()
         batchAdjustmentSource = "预设：\(preset.name)"
         recentSettings.record(preset: id)
     }
@@ -721,7 +732,7 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    private func schedulePreviewRender() {
+    private func schedulePreviewRender(debounceNanoseconds: UInt64 = 0) {
         guard let asset else {
             isRendering = false
             return
@@ -738,6 +749,9 @@ final class EditorViewModel: ObservableObject {
         isRendering = true
         renderTask = Task { [weak self, pipeline, asset, state, luts] in
             do {
+                if debounceNanoseconds > 0 {
+                    try await Task.sleep(nanoseconds: debounceNanoseconds)
+                }
                 let rendered = try await pipeline.render(
                     asset: asset,
                     state: state,

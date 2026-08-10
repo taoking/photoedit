@@ -41,6 +41,50 @@ struct EditState: Codable, Equatable, Sendable {
     mutating func reset() {
         self = .initial
     }
+
+    /// 将持久化状态、预设和连续 Slider 输入统一到 UI 实际显示的精度。
+    /// 这保证界面显示为 0 的参数在渲染、保存和复制时也是精确的中性值。
+    func canonicalized() -> EditState {
+        var output = self
+        output.canonicalize()
+        return output
+    }
+
+    mutating func canonicalize() {
+        light.exposure = light.exposure.quantized(step: 0.1, in: -5...5)
+        light.contrast = light.contrast.quantized(step: 1, in: -100...100)
+        light.highlights = light.highlights.quantized(step: 1, in: -100...100)
+        light.shadows = light.shadows.quantized(step: 1, in: -100...100)
+
+        color.temperature = color.temperature.quantized(step: 1, in: -100...100)
+        color.tint = color.tint.quantized(step: 1, in: -100...100)
+        color.saturation = color.saturation.quantized(step: 1, in: -100...100)
+        color.vibrance = color.vibrance.quantized(step: 1, in: -100...100)
+
+        hsl.canonicalize()
+
+        detail.sharpness = detail.sharpness.quantized(step: 1, in: 0...100)
+        effects.vignette = effects.vignette.quantized(step: 1, in: -100...100)
+        lut.intensity = lut.intensity.quantized(step: 0.01, in: 0...1)
+
+        for index in localAdjustments.indices {
+            localAdjustments[index].adjustments.exposure = localAdjustments[index].adjustments.exposure.quantized(step: 0.1, in: -5...5)
+            localAdjustments[index].adjustments.contrast = localAdjustments[index].adjustments.contrast.quantized(step: 1, in: -100...100)
+            localAdjustments[index].adjustments.saturation = localAdjustments[index].adjustments.saturation.quantized(step: 1, in: -100...100)
+        }
+
+        if var raw {
+            raw.exposure = raw.exposure.quantized(step: 0.01, in: -5...5)
+            raw.temperature = raw.temperature.quantized(step: 0.01, in: -100...100)
+            raw.tint = raw.tint.quantized(step: 0.01, in: -100...100)
+            raw.luminanceNoiseReduction = raw.luminanceNoiseReduction?.quantized(step: 0.01, in: 0...1)
+            raw.colorNoiseReduction = raw.colorNoiseReduction?.quantized(step: 0.01, in: 0...1)
+            raw.sharpness = raw.sharpness?.quantized(step: 0.01, in: 0...1)
+            raw.detail = raw.detail?.quantized(step: 0.01, in: 0...3)
+            raw.localTone = raw.localTone?.quantized(step: 0.01, in: 0...1)
+            self.raw = raw
+        }
+    }
 }
 
 struct RAWAdjustments: Codable, Equatable, Sendable {
@@ -286,6 +330,22 @@ struct HSLAdjustments: Codable, Equatable, Sendable {
     }
 
     var isIdentity: Bool { HSLChannel.allCases.allSatisfy { self[$0].isIdentity } }
+
+    func canonicalized() -> HSLAdjustments {
+        var output = self
+        output.canonicalize()
+        return output
+    }
+
+    mutating func canonicalize() {
+        for channel in HSLChannel.allCases {
+            var adjustment = self[channel]
+            adjustment.hue = adjustment.hue.quantized(step: 1, in: -100...100)
+            adjustment.saturation = adjustment.saturation.quantized(step: 1, in: -100...100)
+            adjustment.luminance = adjustment.luminance.quantized(step: 1, in: -100...100)
+            self[channel] = adjustment
+        }
+    }
 
     mutating func reset(_ channel: HSLChannel) { self[channel] = HSLChannelAdjustment() }
     mutating func resetAll() { self = HSLAdjustments() }
@@ -535,5 +595,11 @@ enum AdjustmentMapper {
 extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         min(max(self, range.lowerBound), range.upperBound)
+    }
+
+    fileprivate func quantized(step: Double, in range: ClosedRange<Double>) -> Double {
+        guard isFinite, step > 0 else { return 0 }
+        let value = (clamped(to: range) / step).rounded() * step
+        return abs(value) < step / 2 ? 0 : value.clamped(to: range)
     }
 }

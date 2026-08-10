@@ -16,6 +16,22 @@ struct VideoEditState: Codable, Equatable, Sendable {
     var isIdentity: Bool {
         exposure == 0 && contrast == 0 && saturation == 0 && selectedLUTID == nil
     }
+
+    func canonicalized() -> VideoEditState {
+        var output = self
+        output.exposure = Self.quantize(exposure, step: 0.1, range: -5...5)
+        output.contrast = Self.quantize(contrast, step: 1, range: -100...100)
+        output.saturation = Self.quantize(saturation, step: 1, range: -100...100)
+        output.lutIntensity = Self.quantize(lutIntensity, step: 0.01, range: 0...1)
+        return output
+    }
+
+    private static func quantize(_ value: Double, step: Double, range: ClosedRange<Double>) -> Double {
+        guard value.isFinite else { return 0 }
+        let clamped = min(max(value, range.lowerBound), range.upperBound)
+        let rounded = (clamped / step).rounded() * step
+        return abs(rounded) < step / 2 ? 0 : rounded
+    }
 }
 
 struct VideoFrameTransform: Equatable, Sendable {
@@ -161,6 +177,7 @@ enum VideoFrameProcessor {
     }
 
     static func apply(_ source: CIImage, state: VideoEditState, lut: LUT?, transform: VideoFrameTransform? = nil) throws -> CIImage {
+        let state = state.canonicalized()
         var image = source
         if state.exposure != 0 {
             image = try filter("CIExposureAdjust", image: image, values: [kCIInputEVKey: AdjustmentMapper.exposureEV(state.exposure)])

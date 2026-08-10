@@ -16,6 +16,8 @@ Source Color Space
 
 `CIContext` performs its normal source-to-working and working-to-output color handling. The pipeline deliberately does not add `CIImage.matchedToWorkingSpace` nodes: Core Image returns a black frame for some generated or profile-less `CIImage` graphs when those nodes are injected. This keeps ordinary CIImage, ImageIO and RAW paths stable while retaining the context-level color-management boundary.
 
+SDR HSL is a deliberate local exception inside the global linear working graph. Its single-pass kernel converts each sampled extended-linear value through the sRGB transfer function, derives all eight channel weights from that unchanged display-referred pixel, combines active channel deltas without overlap amplification, and converts the result back to linear. Values above 1 are normalized only for classification and regain their original peak afterward; a pixel outside every active hue range returns byte-for-byte unchanged. HDR HSL remains disabled because this SDR rule is not an HLG/PQ appearance model.
+
 ## Descriptors
 
 `ColorSpaceDescriptor` covers the Core Image color spaces the app can actually construct: sRGB, Display P3, Linear sRGB, Rec.709, Extended Linear sRGB, Rec.709 HLG and Rec.2100 HLG. `ColorEncodingDescriptor` separately persists **primaries/gamut** and **transfer function**, so metadata can distinguish e.g. Rec.2020 HLG from Rec.709 HLG instead of treating both as a vague “HDR space”. Existing Phase 5 JSON without these fields migrates from its stored `ColorSpaceDescriptor`.

@@ -82,6 +82,7 @@ struct EditorSliderRow: View {
     let range: ClosedRange<Double>
     let suffix: String
     let fractionDigits: Int
+    let step: Double
     @ObservedObject var model: EditorViewModel
 
     init(
@@ -90,6 +91,7 @@ struct EditorSliderRow: View {
         range: ClosedRange<Double>,
         suffix: String = "",
         fractionDigits: Int = 0,
+        step: Double? = nil,
         model: EditorViewModel
     ) {
         self.title = title
@@ -97,6 +99,7 @@ struct EditorSliderRow: View {
         self.range = range
         self.suffix = suffix
         self.fractionDigits = fractionDigits
+        self.step = step ?? (fractionDigits == 0 ? 1 : 0.1)
         self.model = model
     }
 
@@ -110,7 +113,7 @@ struct EditorSliderRow: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.62))
             }
-            Slider(value: value, in: range, onEditingChanged: { editing in
+            Slider(value: value, in: range, step: step, onEditingChanged: { editing in
                 if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
             })
             .accessibilityLabel(title)

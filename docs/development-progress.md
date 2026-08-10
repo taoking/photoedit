@@ -319,3 +319,24 @@ Known Limitations:
 
 - HDR HLG/PQ, Dolby Vision, gain maps and per-frame HDR metadata have no Phase 8 export policy and are explicitly outside this SDR video workflow. Unmarked HDR sources cannot be inferred reliably from an extension alone and still require human source inspection.
 - No trim, transition, multi-track, local masks, HSL/curves, RAW or technical log-to-display video conversion is implemented. The scope is basic SDR correction plus a declared Creative LUT.
+
+## Phase 9.2 — Color adjustment stability
+
+Status: COMPLETED
+
+Tests: PASS — 91 tests, 0 failures, including HSL exact-neutral, extended-range non-target preservation, overlapping-channel normalization, rapid final-state rendering, preset/clipboard canonicalization and existing UI automation.
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Acceptance:
+
+- [PASS] Eight HSL ranges are classified and combined from one unchanged source pixel in one kernel invocation; an earlier range can no longer move a pixel into a later range during the same render.
+- [PASS] The SDR HSL kernel explicitly converts extended-linear sRGB samples to display-referred sRGB and back, preserves the original peak/residual, and returns pixels outside active hue ranges unchanged.
+- [PASS] Overlapping active channels normalize their combined weight, so identical neighboring adjustments do not double the requested effect.
+- [PASS] Photo, RAW, local, LUT and video sliders use a step matching their displayed precision. Edit state, presets, clipboard, restored sessions and render entry points canonicalize legacy fractional residue to the same precision.
+- [PASS] Continuous preview requests are coalesced for one display frame while render generation still guarantees that only the newest state can publish.
+
+Manual Verification Required:
+
+- On the connected iPhone, repeat positive/negative HSL changes on real skin tones, orange foliage, aqua and blue, then return every control to 0 and compare against the before view.
+- Check high-exposure saturated regions and adjacent HSL channels on real JPEG/HEIF/RAW previews and exports. Automated synthetic pixels cover the invariant, but display appearance still requires human inspection.

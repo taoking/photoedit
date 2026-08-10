@@ -7,6 +7,8 @@
 - iPhone HEIC、带/不带 ICC profile 的 sRGB JPEG、Display P3 照片分别导入。
 - 检查 EXIF 6/8 方向、裁切、90° 旋转、最长边 resize 后的预览/导出像素尺寸和 Orientation=1 metadata。
 - 对比 Preview 与 JPEG/HEIF 导出的曝光、色温、饱和度、HSL、曲线和 Creative LUT。
+- 在红、橙、肤色、青、蓝区域反复正负调整 HSL 后回到界面 0；确认预览恢复原图且相邻通道不会随操作次数持续串色。
+- 先提高曝光再调整不匹配的 HSL 通道，确认高光和非目标颜色不发生额外重建、变白或色相漂移。
 - 分别验证 GPS 保留/移除；确认拍摄日期、相机、镜头、ISO、快门和光圈仍存在。
 
 ## Sony A7C II ARW / DNG

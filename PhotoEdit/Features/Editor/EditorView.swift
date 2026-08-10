@@ -771,7 +771,7 @@ private struct HSLPanel: View {
         )
         return VStack(spacing: 2) {
             HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(0)))").foregroundStyle(.secondary).monospacedDigit() }
-            Slider(value: value, in: -100...100, onEditingChanged: { editing in
+            Slider(value: value, in: -100...100, step: 1, onEditingChanged: { editing in
                 if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
             })
         }
@@ -842,7 +842,7 @@ private struct RAWPanel: View {
     private func rawSliderControl(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         return VStack(spacing: 2) {
             HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(2)))").foregroundStyle(.secondary).monospacedDigit() }
-            Slider(value: value, in: range, onEditingChanged: { editing in if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() } })
+            Slider(value: value, in: range, step: 0.01, onEditingChanged: { editing in if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() } })
         }
     }
 }
@@ -1126,7 +1126,7 @@ private struct LUTPanel: View {
                 Slider(value: Binding(
                     get: { model.state.lut.intensity * 100 },
                     set: { value in model.updateContinuous { $0.lut.intensity = value / 100 } }
-                ), in: 0...100, onEditingChanged: { editing in
+                ), in: 0...100, step: 1, onEditingChanged: { editing in
                     if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
                 })
                 Text("\(Int((model.state.lut.intensity * 100).rounded()))%")
@@ -1404,7 +1404,7 @@ private struct LocalAdjustmentsPanel: View {
                         Toggle("启用此局部调整", isOn: binding(for: selected.id, keyPath: \.isEnabled))
                         maskControls(for: selected)
                         Divider()
-                        adjustmentSlider("曝光", value: adjustmentBinding(for: selected.id, keyPath: \.exposure), range: -5...5)
+                        adjustmentSlider("曝光", value: adjustmentBinding(for: selected.id, keyPath: \.exposure), range: -5...5, fractionDigits: 1, step: 0.1)
                         adjustmentSlider("对比度", value: adjustmentBinding(for: selected.id, keyPath: \.contrast), range: -100...100)
                         adjustmentSlider("饱和度", value: adjustmentBinding(for: selected.id, keyPath: \.saturation), range: -100...100)
                     }
@@ -1460,18 +1460,28 @@ private struct LocalAdjustmentsPanel: View {
         }
     }
 
-    private func adjustmentSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+    private func adjustmentSlider(
+        _ title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        fractionDigits: Int = 0,
+        step: Double = 1
+    ) -> some View {
         VStack(spacing: 2) {
-            HStack { Text(title); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(0))).foregroundStyle(.secondary).monospacedDigit() }
-            Slider(value: value, in: range)
+            HStack { Text(title); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(fractionDigits))).foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: range, step: step, onEditingChanged: continuousEditingChanged)
         }
     }
 
     private func maskSlider(_ title: String, value: Binding<Double>) -> some View {
         VStack(spacing: 2) {
             HStack { Text(title); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(2))).foregroundStyle(.secondary).monospacedDigit() }
-            Slider(value: value, in: 0...1)
+            Slider(value: value, in: 0...1, step: 0.01, onEditingChanged: continuousEditingChanged)
         }
+    }
+
+    private func continuousEditingChanged(_ editing: Bool) {
+        if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
     }
 
     private func binding(for id: UUID, keyPath: WritableKeyPath<LocalAdjustment, Bool>) -> Binding<Bool> {
@@ -1484,7 +1494,7 @@ private struct LocalAdjustmentsPanel: View {
     private func adjustmentBinding(for id: UUID, keyPath: WritableKeyPath<LocalAdjustmentValues, Double>) -> Binding<Double> {
         Binding(
             get: { model.state.localAdjustments.first(where: { $0.id == id })?.adjustments[keyPath: keyPath] ?? 0 },
-            set: { value in model.updateLocalAdjustment(id: id) { $0.adjustments[keyPath: keyPath] = value } }
+            set: { value in model.updateLocalAdjustmentContinuous(id: id) { $0.adjustments[keyPath: keyPath] = value } }
         )
     }
 
@@ -1495,7 +1505,7 @@ private struct LocalAdjustmentsPanel: View {
                 return mask[keyPath: keyPath]
             },
             set: { value in
-                model.updateLocalAdjustment(id: id) {
+                model.updateLocalAdjustmentContinuous(id: id) {
                     guard case var .linear(mask) = $0.mask else { return }
                     mask[keyPath: keyPath] = value.clamped(to: 0...1)
                     $0.mask = .linear(mask)
@@ -1511,7 +1521,7 @@ private struct LocalAdjustmentsPanel: View {
                 return mask[keyPath: keyPath]
             },
             set: { value in
-                model.updateLocalAdjustment(id: id) {
+                model.updateLocalAdjustmentContinuous(id: id) {
                     guard case var .radial(mask) = $0.mask else { return }
                     mask[keyPath: keyPath] = value.clamped(to: 0...1)
                     $0.mask = .radial(mask)
@@ -1527,7 +1537,7 @@ private struct LocalAdjustmentsPanel: View {
                 return mask[keyPath: keyPath]
             },
             set: { value in
-                model.updateLocalAdjustment(id: id) {
+                model.updateLocalAdjustmentContinuous(id: id) {
                     guard case var .radial(mask) = $0.mask else { return }
                     mask[keyPath: keyPath] = value.clamped(to: 0...1)
                     $0.mask = .radial(mask)
@@ -1543,7 +1553,7 @@ private struct LocalAdjustmentsPanel: View {
                 return mask[keyPath: keyPath]
             },
             set: { value in
-                model.updateLocalAdjustment(id: id) {
+                model.updateLocalAdjustmentContinuous(id: id) {
                     guard case var .brush(mask) = $0.mask else { return }
                     mask[keyPath: keyPath] = value.clamped(to: 0...1)
                     $0.mask = .brush(mask)
@@ -1635,7 +1645,7 @@ private struct CropPanel: View {
     private func cropSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(spacing: 2) {
             HStack { Text(title); Spacer(); Text("\(value.wrappedValue, format: .number.precision(.fractionLength(2)))").foregroundStyle(.secondary).monospacedDigit() }
-            Slider(value: value, in: range, onEditingChanged: { editing in
+            Slider(value: value, in: range, step: 0.01, onEditingChanged: { editing in
                 if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
             })
         }

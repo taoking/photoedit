@@ -64,7 +64,13 @@ final class PresetRepository: ObservableObject {
     func create(name: String, state: EditState, includesTransform: Bool) throws -> Preset {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ImageEditorError.invalidLUT }
-        let preset = Preset(id: UUID(), name: trimmed, isFavorite: false, createdAt: .now, payload: PresetPayload(state: state, includesTransform: includesTransform))
+        let preset = Preset(
+            id: UUID(),
+            name: trimmed,
+            isFavorite: false,
+            createdAt: .now,
+            payload: PresetPayload(state: state.canonicalized(), includesTransform: includesTransform)
+        )
         let previous = presets
         presets.append(preset)
         do { try save() }

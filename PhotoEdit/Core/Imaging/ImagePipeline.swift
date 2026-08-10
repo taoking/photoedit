@@ -69,6 +69,7 @@ actor ImagePipeline {
         dynamicRange: RenderDynamicRange = .sdr,
         mode: RenderMode
     ) throws -> CGImage {
+        let state = state.canonicalized()
         let image = try renderedImage(
             source: source,
             state: state,
@@ -96,6 +97,7 @@ actor ImagePipeline {
         technicalLUT: LUT? = nil,
         settings: ExportSettings
     ) throws -> Data {
+        let state = state.canonicalized()
         _ = try HDRRendering.makePlan(
             sourceColorSpace: asset.sourceColorSpace,
             sourceHeadroom: asset.sourceHeadroom,
@@ -196,6 +198,7 @@ actor ImagePipeline {
         mode: RenderMode,
         rawQuality: RAWRenderQuality? = nil
     ) throws -> CGImage {
+        let state = state.canonicalized()
         let source = try sourceImage(for: asset, mode: mode, rawQuality: rawQuality, state: state)
         return try render(
             image: source,
