@@ -24,6 +24,62 @@
 3. 在 Xcode 顶部选择已连接的 iPhone，按 `⌘R`。Xcode 会构建、签名并覆盖安装旧版本。
 4. 首次安装或更换签名账号后，按下文“信任开发者”完成手机侧确认。
 
+## 手动安装已经构建好的 App 包
+
+这一节适合“代码已经构建完成，只想把安装包再次装到手机”的情况。iPhone 不能直接运行 macOS Finder 中双击的 `.app`，也不能通过 AirDrop 安装未经当前设备授权签名的包。这里的安装包必须是针对 `iphoneos` 构建、使用当前 Apple Development Team 签名的 `PhotoEdit.app`；Simulator 的 `Debug-iphonesimulator/PhotoEdit.app` 不能装到真机。
+
+### 方法一：在 Xcode 中拖入 `.app`
+
+1. 用 USB 连接并解锁 iPhone，确认已经信任此 Mac，且 Developer Mode 已开启。
+2. 打开 Xcode，选择 **Window → Devices and Simulators**。
+3. 在左侧选择目标 iPhone，等待状态变为 Connected。
+4. 在 **Installed Apps** 区域点击 `+`，或直接把已签名的 `PhotoEdit.app` 拖入该区域。
+5. 等待安装完成后，从 iPhone 桌面手动打开 PhotoEdit。若系统提示未信任开发者，按“信任开发者”一节操作。
+
+构建产物通常位于自定义 Derived Data 目录：
+
+```text
+<DerivedData>/Build/Products/Debug-iphoneos/PhotoEdit.app
+```
+
+只要 Bundle Identifier 和签名 Team 与手机上原版本一致，重复安装会覆盖应用并保留 Application Support 中的当前编辑会话。更换 Bundle Identifier 会安装成另一个应用；主动卸载旧应用会同时删除其会话数据。
+
+### 方法二：用命令行安装已有 `.app`
+
+先列出设备，取得 `devicectl` 使用的 Identifier：
+
+```bash
+xcrun devicectl list devices
+```
+
+然后验证签名并覆盖安装。以下变量只在当前终端有效：
+
+```bash
+export PHOTOEDIT_DEVICE_ID='DEVICECTL_DEVICE_IDENTIFIER'
+export PHOTOEDIT_BUNDLE_ID='com.example.photoedit'
+export PHOTOEDIT_APP='/absolute/path/to/PhotoEdit.app'
+
+codesign --verify --deep --strict --verbose=4 "$PHOTOEDIT_APP"
+xcrun devicectl device install app \
+  --device "$PHOTOEDIT_DEVICE_ID" \
+  "$PHOTOEDIT_APP"
+```
+
+安装完成后，可以直接在手机桌面打开；设备保持解锁时也可以从 Mac 启动：
+
+```bash
+xcrun devicectl device process launch \
+  --device "$PHOTOEDIT_DEVICE_ID" \
+  --terminate-existing \
+  "$PHOTOEDIT_BUNDLE_ID"
+```
+
+如果返回 `Locked`，说明包已经安装，但 iOS 拒绝从 Mac 远程启动锁屏设备。解锁手机后手动打开即可，不需要重新构建或安装。
+
+### 收到 `.ipa` 时
+
+Xcode 的 **Devices and Simulators → Installed Apps** 可以接受符合当前设备签名条件的开发 `.ipa`。Personal Team 构建的包只能安装到其 provisioning profile 包含的设备，并且通常约 7 天后失效。来源不明、未签名、使用其他 Team 签名或不包含当前设备 UDID 的 `.ipa` 不能通过上述步骤安装；不要通过关闭系统安全检查来绕过签名要求。
+
 ## 构建、安装与启动
 
 命令行方式适合留存明确构建记录。以下命令在仓库根目录执行；所有变量仅在当前终端有效。将占位符替换为本机实际值：
@@ -67,6 +123,8 @@ xcrun devicectl device process launch \
 ```
 
 之后重复安装时，保持设备已连接并重新执行这一节的签名构建、校验、安装与启动命令即可。使用免费个人开发 Team 时，开发签名通常约 7 天后到期；重新构建并覆盖安装即可续期。
+
+如果只需要把上一次已经构建且签名仍有效的包重新装到同一台手机，可以跳过 `xcodegen generate` 和 `xcodebuild`，直接执行上一节“手动安装已经构建好的 App 包”的签名校验与安装命令。
 
 ## 信任开发者
 

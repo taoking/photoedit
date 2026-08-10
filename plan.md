@@ -947,3 +947,10 @@ Phase 9.0 — Product Usability & Session Reliability：
 - [x] 消除视频渲染及 LUT/预设资料库操作的静默失败
 - [x] 增加核心 UI/状态回归测试并完成 Build、截图与真机验证
 - [x] 更新开发进度与验收文档
+
+Phase 9.0 发布交接：
+
+- [x] 补充已有签名安装包的 Xcode 图形界面手动安装步骤
+- [x] 补充 `devicectl` 命令行覆盖安装与 Personal Team 注意事项
+- [x] 将最终版本覆盖安装到已连接的 iPhone 16 Pro，并完成启动验证
+- [ ] 提交并推送 Phase 9.0 分支

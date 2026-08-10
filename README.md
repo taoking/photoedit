@@ -14,7 +14,7 @@ xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform
 xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
 ```
 
-真机首次签名、构建、安装与启动步骤见 [device-installation.md](docs/device-installation.md)。
+真机首次签名、构建、安装与启动，以及以后通过 Xcode 或 `devicectl` 手动安装已有 `.app`/`.ipa` 的步骤，见 [device-installation.md](docs/device-installation.md)。
 
 ## iPhone 编辑器体验
 
