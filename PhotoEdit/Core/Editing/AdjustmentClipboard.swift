@@ -26,7 +26,7 @@ final class AdjustmentClipboard: ObservableObject {
     var hasAdjustments: Bool { copiedState != nil }
 
     func copy(from state: EditState) {
-        copiedState = state
+        copiedState = state.canonicalized()
     }
 
     func paste(into destination: EditState, groups: Set<AdjustmentGroup> = Set(AdjustmentGroup.allCases)) -> EditState? {

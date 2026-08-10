@@ -13,6 +13,15 @@ final class VideoEditingTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(VideoEditState.self, from: JSONEncoder().encode(state)), state)
     }
 
+    func testVideoDisplayedNeutralValuesCanonicalizeToIdentity() {
+        let state = VideoEditState(exposure: 0.049, contrast: 0.49, saturation: -0.49, selectedLUTID: nil, lutIntensity: 0.004)
+
+        let canonical = state.canonicalized()
+
+        XCTAssertTrue(canonical.isIdentity)
+        XCTAssertEqual(canonical.lutIntensity, 0)
+    }
+
     func testFrameProcessorAppliesBasicColorAndNormalizesOrientationExtent() throws {
         let source = CIImage(color: CIColor(red: 0.18, green: 0.18, blue: 0.18, alpha: 1))
             .cropped(to: CGRect(x: 0, y: 0, width: 80, height: 40))

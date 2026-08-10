@@ -64,28 +64,54 @@ final class PresetRepository: ObservableObject {
     func create(name: String, state: EditState, includesTransform: Bool) throws -> Preset {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ImageEditorError.invalidLUT }
-        let preset = Preset(id: UUID(), name: trimmed, isFavorite: false, createdAt: .now, payload: PresetPayload(state: state, includesTransform: includesTransform))
+        let preset = Preset(
+            id: UUID(),
+            name: trimmed,
+            isFavorite: false,
+            createdAt: .now,
+            payload: PresetPayload(state: state.canonicalized(), includesTransform: includesTransform)
+        )
+        let previous = presets
         presets.append(preset)
-        try save()
+        do { try save() }
+        catch {
+            presets = previous
+            throw error
+        }
         return preset
     }
 
     func rename(id: UUID, to name: String) throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let index = presets.firstIndex(where: { $0.id == id }) else { return }
+        let previous = presets
         presets[index].name = trimmed
-        try save()
+        do { try save() }
+        catch {
+            presets = previous
+            throw error
+        }
     }
 
     func delete(id: UUID) throws {
+        let previous = presets
         presets.removeAll { $0.id == id }
-        try save()
+        do { try save() }
+        catch {
+            presets = previous
+            throw error
+        }
     }
 
     func toggleFavorite(id: UUID) throws {
         guard let index = presets.firstIndex(where: { $0.id == id }) else { return }
+        let previous = presets
         presets[index].isFavorite.toggle()
-        try save()
+        do { try save() }
+        catch {
+            presets = previous
+            throw error
+        }
     }
 
     func preset(id: UUID) -> Preset? { presets.first { $0.id == id } }
@@ -96,8 +122,13 @@ final class PresetRepository: ObservableObject {
         var imported = try JSONDecoder().decode(Preset.self, from: Data(contentsOf: url))
         imported.id = UUID()
         imported.createdAt = .now
+        let previous = presets
         presets.append(imported)
-        try save()
+        do { try save() }
+        catch {
+            presets = previous
+            throw error
+        }
     }
 
     func exportData(id: UUID) throws -> Data {

@@ -63,6 +63,16 @@ final class LUTRepositoryTests: XCTestCase {
         XCTAssertNil(reopened.items.first(where: { $0.id == imported.id }))
     }
 
+    func testFailedCatalogSaveRollsBackInMemoryMutation() throws {
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storage) }
+        try Data([0x00]).write(to: storage)
+        let repository = LUTRepository(storageDirectory: storage)
+
+        XCTAssertThrowsError(try repository.toggleFavorite(id: LUTRepository.identityID))
+        XCTAssertFalse(try XCTUnwrap(repository.items.first).isFavorite)
+    }
+
     private func jpegData(red: CGFloat, green: CGFloat, blue: CGFloat) throws -> Data {
         let image = CIImage(color: CIColor(red: red, green: green, blue: blue, alpha: 1))
             .cropped(to: CGRect(x: 0, y: 0, width: 32, height: 32))

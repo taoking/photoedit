@@ -45,6 +45,7 @@ enum EditorTool: String, CaseIterable, Identifiable {
 
 struct EditorTopBar<MoreActions: View>: View {
     let canUndo: Bool
+    let isExporting: Bool
     let close: () -> Void
     let undo: () -> Void
     let export: () -> Void
@@ -53,6 +54,7 @@ struct EditorTopBar<MoreActions: View>: View {
 
     init(
         canUndo: Bool,
+        isExporting: Bool,
         close: @escaping () -> Void,
         undo: @escaping () -> Void,
         export: @escaping () -> Void,
@@ -60,6 +62,7 @@ struct EditorTopBar<MoreActions: View>: View {
         @ViewBuilder moreActions: @escaping () -> MoreActions
     ) {
         self.canUndo = canUndo
+        self.isExporting = isExporting
         self.close = close
         self.undo = undo
         self.export = export
@@ -74,6 +77,7 @@ struct EditorTopBar<MoreActions: View>: View {
                 .disabled(!canUndo)
 
             Image(systemName: "circle.lefthalf.filled")
+                .font(.system(size: 17, weight: .medium))
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
                 .onLongPressGesture(minimumDuration: 0.05, pressing: setShowingBefore, perform: {})
@@ -82,19 +86,20 @@ struct EditorTopBar<MoreActions: View>: View {
 
             Spacer(minLength: 0)
 
-            iconButton("square.and.arrow.up", label: "导出", action: export)
+            iconButton(isExporting ? "hourglass" : "square.and.arrow.up", label: isExporting ? "正在导出" : "导出", action: export)
+                .disabled(isExporting)
 
             Menu {
                 moreActions()
             } label: {
                 Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .medium))
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
                     .accessibilityLabel("更多编辑操作")
             }
             .buttonStyle(.plain)
         }
-        .font(.body.weight(.medium))
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
         .background(.black.opacity(0.38), in: Capsule())
@@ -104,6 +109,7 @@ struct EditorTopBar<MoreActions: View>: View {
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
+                .font(.system(size: 17, weight: .medium))
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
@@ -113,6 +119,7 @@ struct EditorTopBar<MoreActions: View>: View {
 }
 
 struct EditorToolRail: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let tools: [EditorTool]
     @Binding var selection: EditorTool
     let selectTool: (EditorTool) -> Void
@@ -128,14 +135,16 @@ struct EditorToolRail: View {
                             } label: {
                                 VStack(spacing: 4) {
                                     Image(systemName: tool.symbolName)
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 20 : 16, weight: .semibold))
                                         .frame(height: 20)
-                                    Text(tool.title)
-                                        .font(.caption2.weight(.medium))
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.8)
+                                    if !dynamicTypeSize.isAccessibilitySize {
+                                        Text(tool.title)
+                                            .font(.caption2.weight(.medium))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
+                                    }
                                 }
-                                .frame(width: 58, height: 54)
+                                .frame(width: dynamicTypeSize.isAccessibilitySize ? 52 : 58, height: dynamicTypeSize.isAccessibilitySize ? 58 : 54)
                                 .foregroundStyle(selection == tool ? Color.cyan : .white.opacity(0.62))
                                 .background(selection == tool ? Color.white.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
@@ -154,7 +163,7 @@ struct EditorToolRail: View {
                 }
             }
         }
-        .frame(minHeight: 62)
+        .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 68 : 62)
     }
 }
 
@@ -173,6 +182,7 @@ struct EditorParameterPanel<Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: tool.symbolName)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.cyan)
                 Text(tool.title)
                     .font(.subheadline.weight(.semibold))
@@ -180,6 +190,7 @@ struct EditorParameterPanel<Content: View>: View {
                 Button(action: collapse) {
                     Label("收起", systemImage: "chevron.down")
                         .labelStyle(.iconOnly)
+                        .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 36)
                 }
                 .buttonStyle(.plain)
@@ -187,13 +198,37 @@ struct EditorParameterPanel<Content: View>: View {
                 .accessibilityLabel("收起参数面板")
             }
             .padding(.horizontal, 16)
-            .frame(height: 42)
+            .padding(.vertical, 3)
+            .frame(minHeight: 42)
 
             Divider().overlay(.white.opacity(0.1))
 
             content
         }
         .background(Color.photoEditControlSurface)
+    }
+}
+
+struct ExportStatusBar: View {
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(.cyan)
+            Text("正在生成全分辨率照片…")
+                .font(.footnote.weight(.medium))
+                .lineLimit(2)
+            Spacer(minLength: 4)
+            Button("取消", role: .cancel, action: cancel)
+                .font(.footnote.weight(.semibold))
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.82), in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+        .accessibilityElement(children: .contain)
     }
 }
 

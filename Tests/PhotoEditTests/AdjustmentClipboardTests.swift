@@ -19,4 +19,17 @@ final class AdjustmentClipboardTests: XCTestCase {
         XCTAssertEqual(pasted?.color.tint, 20)
         XCTAssertEqual(pasted?.transform.rotation, 0)
     }
+
+    func testCopyCanonicalizesDisplayedNeutralResidue() {
+        let clipboard = AdjustmentClipboard()
+        var source = EditState.initial
+        source.hsl.orange.hue = 0.49
+        source.color.tint = -0.49
+
+        clipboard.copy(from: source)
+        let pasted = clipboard.paste(into: .initial)
+
+        XCTAssertTrue(pasted?.hsl.isIdentity == true)
+        XCTAssertEqual(pasted?.color.tint, 0)
+    }
 }

@@ -65,6 +65,7 @@ final class VideoEditorViewModel: ObservableObject {
     func update(_ change: (inout VideoEditState) -> Void) {
         let oldState = state
         change(&state)
+        state = state.canonicalized()
         guard oldState != state else { return }
         configurePreview()
     }
@@ -301,7 +302,7 @@ struct VideoEditorView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    videoSlider("LUT 强度", value: binding(\.lutIntensity), range: 0...1, suffix: "")
+                    videoSlider("LUT 强度", value: binding(\.lutIntensity), range: 0...1, fractionDigits: 2, step: 0.01)
                     if !model.undeclaredCreativeLUTItems.isEmpty {
                         Divider()
                         Text("新导入的 .cube 不携带可信色彩空间。仅在 LUT 作者明确注明 sRGB 输入与输出时，才确认以下声明：")
@@ -342,16 +343,25 @@ struct VideoEditorView: View {
         )
     }
 
-    private func videoSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, suffix: String = "") -> some View {
-        VStack(spacing: 2) {
+    private func videoSlider(
+        _ title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        suffix: String = "",
+        fractionDigits: Int? = nil,
+        step: Double? = nil
+    ) -> some View {
+        let digits = fractionDigits ?? (range.upperBound == 5 ? 1 : 0)
+        let sliderStep = step ?? (digits == 0 ? 1 : 0.1)
+        return VStack(spacing: 2) {
             HStack {
                 Text(title)
                 Spacer()
-                Text("\(value.wrappedValue, format: .number.precision(.fractionLength(range.upperBound == 5 ? 1 : range.upperBound == 1 ? 0 : 0)))\(suffix)")
+                Text("\(value.wrappedValue, format: .number.precision(.fractionLength(digits)))\(suffix)")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Slider(value: value, in: range)
+            Slider(value: value, in: range, step: sliderStep)
         }
     }
 

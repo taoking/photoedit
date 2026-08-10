@@ -11,6 +11,8 @@ final class EditorViewModel: ObservableObject {
     @Published var isShowingBefore = false
     @Published private(set) var isRendering = false
     @Published private(set) var isExporting = false
+    @Published private(set) var isRestoringSession = false
+    @Published private(set) var hasRestorableSession = false
     @Published private(set) var histogram = Histogram.empty
     @Published var exportedImage: ExportedImage?
     @Published var errorMessage: String?
@@ -31,6 +33,7 @@ final class EditorViewModel: ObservableObject {
     let recentSettings: RecentSettingsStore
 
     private let pipeline: ImagePipeline
+    private let sessionStore: EditorSessionStore?
     private var renderTask: Task<Void, Never>?
     private var originalPreviewTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
@@ -40,6 +43,11 @@ final class EditorViewModel: ObservableObject {
     private var renderGeneration = 0
     private var loadGeneration = 0
     private var loadTask: Task<Void, Never>?
+    private var sessionRestoreTask: Task<Void, Never>?
+    private var sessionSourceSaveTask: Task<Void, Never>?
+    private var sessionStateSaveTask: Task<Void, Never>?
+    private var sessionRevision = 0
+    private var activeSessionID: UUID?
     private var undoStack: [EditState] = []
     private var pendingContinuousUndo: EditState?
 
@@ -48,13 +56,24 @@ final class EditorViewModel: ObservableObject {
         presetRepository: PresetRepository = PresetRepository(),
         adjustmentClipboard: AdjustmentClipboard = AdjustmentClipboard(),
         recentSettings: RecentSettingsStore = RecentSettingsStore(),
-        pipeline: ImagePipeline = .shared
+        pipeline: ImagePipeline = .shared,
+        sessionStore: EditorSessionStore? = nil,
+        restoresSessionAutomatically: Bool = false
     ) {
         self.lutRepository = lutRepository
         self.presetRepository = presetRepository
         self.adjustmentClipboard = adjustmentClipboard
         self.recentSettings = recentSettings
         self.pipeline = pipeline
+        self.sessionStore = sessionStore
+        guard let sessionStore else { return }
+        Task { [weak self] in
+            let hasSavedSession = await sessionStore.hasSavedSession()
+            self?.hasRestorableSession = hasSavedSession
+            if restoresSessionAutomatically, hasSavedSession {
+                self?.restoreSavedSession()
+            }
+        }
     }
 
     deinit {
@@ -65,9 +84,13 @@ final class EditorViewModel: ObservableObject {
         batchTask?.cancel()
         histogramTask?.cancel()
         referenceTask?.cancel()
+        sessionRestoreTask?.cancel()
+        sessionSourceSaveTask?.cancel()
+        sessionStateSaveTask?.cancel()
     }
 
     var canUndo: Bool { !undoStack.isEmpty }
+    var hasEdits: Bool { state != Self.defaultState(for: asset) }
     /// HDR 源的主预览输出为 RGBA half-float；视图层请求 high dynamic range 显示。
     var usesHDRPreview: Bool { asset?.hasHDRContent == true }
     var batchOutputURLs: [URL] {
@@ -118,6 +141,7 @@ final class EditorViewModel: ObservableObject {
     func update(_ change: (inout EditState) -> Void) {
         let previous = state
         change(&state)
+        state.canonicalize()
         guard state != previous else { return }
         if pendingContinuousUndo == nil { undoStack.append(previous) }
         lutPreviewCache.clear()
@@ -130,9 +154,12 @@ final class EditorViewModel: ObservableObject {
     }
 
     func updateContinuous(_ change: (inout EditState) -> Void) {
+        let previous = state
         change(&state)
+        state.canonicalize()
+        guard state != previous else { return }
         lutPreviewCache.clear()
-        schedulePreviewRender()
+        schedulePreviewRender(debounceNanoseconds: 16_000_000)
     }
 
     func endContinuousEdit() {
@@ -158,14 +185,16 @@ final class EditorViewModel: ObservableObject {
         schedulePreviewRender()
     }
 
-    /// 返回导入页。编辑状态和预览属于当前照片，不能在下一次导入时短暂显示旧内容。
-    func closeCurrentAsset() {
+    /// 返回导入页。默认保留自动保存的会话，用户明确放弃时才删除它。
+    func closeCurrentAsset(discardSession: Bool = false) {
         loadTask?.cancel()
         renderTask?.cancel()
         originalPreviewTask?.cancel()
         histogramTask?.cancel()
         referenceTask?.cancel()
         exportTask?.cancel()
+        sessionRestoreTask?.cancel()
+        sessionStateSaveTask?.cancel()
         loadGeneration += 1
         renderGeneration += 1
         asset = nil
@@ -181,6 +210,55 @@ final class EditorViewModel: ObservableObject {
         undoStack.removeAll()
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
+        if discardSession {
+            sessionSourceSaveTask?.cancel()
+            hasRestorableSession = false
+            if let sessionStore {
+                Task { [weak self] in
+                    do { try await sessionStore.clear() }
+                    catch { self?.present(error) }
+                }
+            }
+        }
+    }
+
+    func restoreSavedSession() {
+        guard let sessionStore, !isRestoringSession else { return }
+        let generation = beginLoading()
+        isRestoringSession = true
+        errorMessage = nil
+        sessionRestoreTask = Task { [weak self] in
+            do {
+                guard let restored = try await sessionStore.load() else {
+                    self?.hasRestorableSession = false
+                    self?.isRestoringSession = false
+                    self?.isRendering = false
+                    return
+                }
+                let loaded = try await Task.detached(priority: .userInitiated) {
+                    try ImageLoader.load(data: restored.sourceData, sourceName: restored.record.sourceName)
+                }.value
+                guard !Task.isCancelled, let self, self.loadGeneration == generation else { return }
+                self.install(asset: loaded, scheduleRendering: false, persistSession: false)
+                self.state = restored.record.state.canonicalized()
+                self.activeSessionID = restored.record.id
+                self.hasRestorableSession = true
+                self.isRestoringSession = false
+                self.renderOriginalPreview()
+                self.schedulePreviewRender()
+            } catch is CancellationError {
+                if self?.loadGeneration == generation {
+                    self?.isRestoringSession = false
+                    self?.isRendering = false
+                }
+            } catch {
+                guard self?.loadGeneration == generation else { return }
+                self?.isRestoringSession = false
+                self?.isRendering = false
+                self?.hasRestorableSession = false
+                self?.present(error)
+            }
+        }
     }
 
     func addLocalAdjustment(mask: LocalMask) {
@@ -196,6 +274,13 @@ final class EditorViewModel: ObservableObject {
 
     func updateLocalAdjustment(id: UUID, change: (inout LocalAdjustment) -> Void) {
         update { state in
+            guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }) else { return }
+            change(&state.localAdjustments[index])
+        }
+    }
+
+    func updateLocalAdjustmentContinuous(id: UUID, change: (inout LocalAdjustment) -> Void) {
+        updateContinuous { state in
             guard let index = state.localAdjustments.firstIndex(where: { $0.id == id }) else { return }
             change(&state.localAdjustments[index])
         }
@@ -304,7 +389,7 @@ final class EditorViewModel: ObservableObject {
     func pasteAdjustments(groups: Set<AdjustmentGroup> = Set(AdjustmentGroup.allCases)) {
         guard let pasted = adjustmentClipboard.paste(into: state, groups: groups), pasted != state else { return }
         undoStack.append(state)
-        state = pasted
+        state = pasted.canonicalized()
         lutPreviewCache.clear()
         schedulePreviewRender()
     }
@@ -322,7 +407,7 @@ final class EditorViewModel: ObservableObject {
         let applied = preset.payload.applying(to: state)
         guard applied != state else { return }
         undoStack.append(state)
-        state = applied
+        state = applied.canonicalized()
         recentSettings.record(preset: id)
         lutPreviewCache.clear()
         schedulePreviewRender()
@@ -333,9 +418,55 @@ final class EditorViewModel: ObservableObject {
         catch { present(error) }
     }
 
+    func togglePresetFavorite(id: UUID) {
+        do { try presetRepository.toggleFavorite(id: id) }
+        catch { present(error) }
+    }
+
+    func renamePreset(id: UUID, to name: String) {
+        do { try presetRepository.rename(id: id, to: name) }
+        catch { present(error) }
+    }
+
+    func deletePreset(id: UUID) {
+        do { try presetRepository.delete(id: id) }
+        catch { present(error) }
+    }
+
+    func exportPresetData(id: UUID) -> Data? {
+        do { return try presetRepository.exportData(id: id) }
+        catch {
+            present(error)
+            return nil
+        }
+    }
+
     func importLUT(url: URL) {
         do {
             try lutRepository.importLUT(from: url)
+            lutPreviewCache.clear()
+        } catch {
+            present(error)
+        }
+    }
+
+    func toggleLUTFavorite(id: UUID) {
+        do { try lutRepository.toggleFavorite(id: id) }
+        catch { present(error) }
+    }
+
+    func renameLUT(id: UUID, to name: String) {
+        do { try lutRepository.rename(id: id, to: name) }
+        catch { present(error) }
+    }
+
+    func deleteLUT(id: UUID) {
+        let wasCreativeSelection = state.lut.selectedLUTID == id
+        let wasTechnicalSelection = state.lut.technicalLUTID == id
+        do {
+            try lutRepository.delete(id: id)
+            if wasCreativeSelection { selectLUT(nil) }
+            if wasTechnicalSelection { selectTechnicalLUT(nil) }
             lutPreviewCache.clear()
         } catch {
             present(error)
@@ -369,8 +500,7 @@ final class EditorViewModel: ObservableObject {
     }
 
     func export(settings: ExportSettings) {
-        guard let asset else { return }
-        exportTask?.cancel()
+        guard let asset, !isExporting else { return }
         isExporting = true
         errorMessage = nil
         recentSettings.record(export: settings)
@@ -396,6 +526,12 @@ final class EditorViewModel: ObservableObject {
                 self?.present(error)
             }
         }
+    }
+
+    func cancelExport() {
+        exportTask?.cancel()
+        exportTask = nil
+        isExporting = false
     }
 
     func clearExport() {
@@ -435,14 +571,14 @@ final class EditorViewModel: ObservableObject {
 
     func applyCopiedAdjustmentsToBatch() -> Bool {
         guard let copied = adjustmentClipboard.paste(into: .initial) else { return false }
-        batchState = copied
+        batchState = copied.canonicalized()
         batchAdjustmentSource = "已复制的调整"
         return true
     }
 
     func applyPresetToBatch(id: UUID) {
         guard let preset = presetRepository.preset(id: id) else { return }
-        batchState = preset.payload.applying(to: .initial)
+        batchState = preset.payload.applying(to: .initial).canonicalized()
         batchAdjustmentSource = "预设：\(preset.name)"
         recentSettings.record(preset: id)
     }
@@ -520,13 +656,14 @@ final class EditorViewModel: ObservableObject {
 
     /// 安装与重置都必须依据资产类型建立默认状态：RAW 资产需要保留独立的 RAW
     /// decode state，不能在全局重置后变成普通图片状态。
-    func install(asset: ImageAsset, scheduleRendering: Bool = true) {
+    func install(asset: ImageAsset, scheduleRendering: Bool = true, persistSession: Bool = true) {
         self.asset = asset
         state = Self.defaultState(for: asset)
         selectedLocalAdjustmentID = nil
         undoStack.removeAll()
         pendingContinuousUndo = nil
         lutPreviewCache.clear()
+        if persistSession { saveNewSession(for: asset) }
         guard scheduleRendering else { return }
         renderOriginalPreview()
         schedulePreviewRender()
@@ -542,6 +679,8 @@ final class EditorViewModel: ObservableObject {
 
     private func beginLoading() -> Int {
         loadTask?.cancel()
+        sessionRestoreTask?.cancel()
+        isRestoringSession = false
         cancelRender()
         originalPreviewTask?.cancel()
         loadGeneration += 1
@@ -593,7 +732,7 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    private func schedulePreviewRender() {
+    private func schedulePreviewRender(debounceNanoseconds: UInt64 = 0) {
         guard let asset else {
             isRendering = false
             return
@@ -604,9 +743,15 @@ final class EditorViewModel: ObservableObject {
         let generation = renderGeneration
         let state = state
         let luts = selectedLUTs(for: state)
+        if let activeSessionID {
+            scheduleSessionStateSave(sessionID: activeSessionID, state: state)
+        }
         isRendering = true
         renderTask = Task { [weak self, pipeline, asset, state, luts] in
             do {
+                if debounceNanoseconds > 0 {
+                    try await Task.sleep(nanoseconds: debounceNanoseconds)
+                }
                 let rendered = try await pipeline.render(
                     asset: asset,
                     state: state,
@@ -654,5 +799,49 @@ final class EditorViewModel: ObservableObject {
 
     private func present(_ error: Error) {
         errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    private func saveNewSession(for asset: ImageAsset) {
+        guard let sessionStore else { return }
+        sessionSourceSaveTask?.cancel()
+        sessionStateSaveTask?.cancel()
+        sessionRevision += 1
+        let revision = sessionRevision
+        let state = state
+        activeSessionID = asset.id
+        sessionSourceSaveTask = Task { [weak self] in
+            do {
+                try await sessionStore.saveNew(
+                    id: asset.id,
+                    sourceName: asset.sourceName,
+                    sourceData: asset.originalData,
+                    state: state,
+                    revision: revision
+                )
+                guard !Task.isCancelled else { return }
+                self?.hasRestorableSession = true
+            } catch is CancellationError {
+                // A newer import owns the persisted session.
+            } catch {
+                self?.present(error)
+            }
+        }
+    }
+
+    private func scheduleSessionStateSave(sessionID: UUID, state: EditState) {
+        guard let sessionStore, !isRestoringSession else { return }
+        sessionStateSaveTask?.cancel()
+        sessionRevision += 1
+        let revision = sessionRevision
+        sessionStateSaveTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+                try await sessionStore.updateState(id: sessionID, state: state, revision: revision)
+            } catch is CancellationError {
+                // Debounced by a newer edit.
+            } catch {
+                self?.present(error)
+            }
+        }
     }
 }

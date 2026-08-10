@@ -38,13 +38,27 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PhotoEdit.app/PhotoEdit"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  PhotoEditUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/PhotoEditUITests
+    dependencies:
+      - target: PhotoEdit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.taoking.PhotoEditUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: PhotoEdit
 schemes:
   PhotoEdit:
     build:
       targets:
         PhotoEdit: all
         PhotoEditTests: [test]
+        PhotoEditUITests: [test]
     test:
       targets:
         - PhotoEditTests
+        - PhotoEditUITests
       gatherCoverageData: true

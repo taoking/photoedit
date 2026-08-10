@@ -1,5 +1,36 @@
 # Development Progress
 
+## Phase 9.0 — Product Usability & Session Reliability
+
+Status: COMPLETED
+
+Commit: recorded by the Phase 9.0 commit in Git history
+
+Tests: PASS — `xcodebuild -project PhotoEdit.xcodeproj -scheme PhotoEdit -destination 'platform=iOS Simulator,id=E2208B8A-94AC-4945-A50F-05AD793584B2' test`; 82 tests, 0 failures（包含 80 项单元测试与 2 项 XCUITest；iPhone 17 Pro、iOS 26.5）。
+
+Build: PASS — `xcodegen generate` 后独立 Simulator build 成功；使用 Personal Team 对 iPhone 16 Pro 完成签名构建、签名校验与最终覆盖安装。阶段内首次安装后已成功启动 `com.taoking.photoedit.dev`；最终覆盖安装后的再次启动因设备已经锁屏被系统拒绝，不属于应用构建或安装失败。
+
+Phase 9.0 Acceptance:
+
+- [PASS] 竖屏保留照片优先的上下结构；横屏切换为照片在左、参数在右的双栏，参数区不再把照片压成窄条。
+- [PASS] 标准字号参数面板获得更合理的自适应高度和可滚动内容；Accessibility XXL 下工具栏使用图标主导样式，顶部关键图标不随字号失控放大，滑杆保留可调节辅助功能语义。
+- [PASS] 当前照片原始数据与 `EditState` 自动保存；冷启动可恢复，关闭时提供“保留编辑”和“放弃编辑”明确语义，并以 revision 防止旧异步保存覆盖新会话。
+- [PASS] 单图全分辨率导出在主编辑页持续显示状态和取消入口，导出按钮在任务期间禁用，重复提交不会替换正在运行的任务。
+- [PASS] 视频逐帧滤镜错误从 `AVVideoComposition` 抛出，不再静默回退原帧；LUT/预设收藏、重命名、删除和导出失败会显示错误，资料库写入失败会回滚内存状态。
+- [PASS] 新增会话存储顺序/恢复测试，以及竖屏、横屏、关闭保护和 Accessibility XXL 核心 UI 自动化；Simulator 人工截图检查确认照片和参数区均保持可判断、可滚动。
+
+Manual Verification Required:
+
+- 已连接 iPhone 16 Pro 完成签名、安装，并在设备解锁时完成启动验证；最终版本已覆盖安装，当前需解锁手机后手动打开。仍需用户用真实竖图/横图检查连续双指缩放、参数滚动、锁屏/杀进程后的会话恢复，以及大尺寸照片导出取消的触感。
+- UI 自动化使用 Debug-only 合成图片，不替代 12/24/48MP、RAW 与 HDR 真实媒体性能基线。
+
+Known Limitations:
+
+- Phase 9.0 解决发布阻断项，不包含照片上直接裁切、线性/径向/画笔蒙版手柄、redo/history；这些属于 Phase 9.1。
+- 当前会话只保存一张正在编辑的照片，不是多项目最近编辑列表；最近项目首页属于 Phase 9.2。
+
+---
+
 ## Phase 8.5 — Correctness & Real-world Validation
 
 Status: COMPLETED
@@ -288,3 +319,24 @@ Known Limitations:
 
 - HDR HLG/PQ, Dolby Vision, gain maps and per-frame HDR metadata have no Phase 8 export policy and are explicitly outside this SDR video workflow. Unmarked HDR sources cannot be inferred reliably from an extension alone and still require human source inspection.
 - No trim, transition, multi-track, local masks, HSL/curves, RAW or technical log-to-display video conversion is implemented. The scope is basic SDR correction plus a declared Creative LUT.
+
+## Phase 9.2 — Color adjustment stability
+
+Status: COMPLETED
+
+Tests: PASS — 91 tests, 0 failures, including HSL exact-neutral, extended-range non-target preservation, overlapping-channel normalization, rapid final-state rendering, preset/clipboard canonicalization and existing UI automation.
+
+Build: PASS — iPhone 17 Pro, iOS 26.5 Simulator.
+
+Acceptance:
+
+- [PASS] Eight HSL ranges are classified and combined from one unchanged source pixel in one kernel invocation; an earlier range can no longer move a pixel into a later range during the same render.
+- [PASS] The SDR HSL kernel explicitly converts extended-linear sRGB samples to display-referred sRGB and back, preserves the original peak/residual, and returns pixels outside active hue ranges unchanged.
+- [PASS] Overlapping active channels normalize their combined weight, so identical neighboring adjustments do not double the requested effect.
+- [PASS] Photo, RAW, local, LUT and video sliders use a step matching their displayed precision. Edit state, presets, clipboard, restored sessions and render entry points canonicalize legacy fractional residue to the same precision.
+- [PASS] Continuous preview requests are coalesced for one display frame while render generation still guarantees that only the newest state can publish.
+
+Manual Verification Required:
+
+- On the connected iPhone, repeat positive/negative HSL changes on real skin tones, orange foliage, aqua and blue, then return every control to 0 and compare against the before view.
+- Check high-exposure saturated regions and adjacent HSL channels on real JPEG/HEIF/RAW previews and exports. Automated synthetic pixels cover the invariant, but display appearance still requires human inspection.
