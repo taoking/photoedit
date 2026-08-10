@@ -4,7 +4,7 @@ struct LightPanel: View {
     @ObservedObject var model: EditorViewModel
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView(showsIndicators: true) {
             VStack(spacing: 10) {
                 EditorSliderRow("曝光", value: light(\.exposure), range: -5...5, suffix: " EV", fractionDigits: 1, model: model)
                 EditorSliderRow("对比度", value: light(\.contrast), range: -100...100, model: model)
@@ -27,7 +27,7 @@ struct ColorPanel: View {
     @ObservedObject var model: EditorViewModel
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView(showsIndicators: true) {
             VStack(spacing: 10) {
                 EditorSliderRow("色温", value: color(\.temperature), range: -100...100, model: model)
                 EditorSliderRow("色调", value: color(\.tint), range: -100...100, model: model)
@@ -50,7 +50,7 @@ struct DetailPanel: View {
     @ObservedObject var model: EditorViewModel
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        ScrollView(showsIndicators: true) {
             VStack(spacing: 10) {
                 EditorSliderRow("锐化", value: detail(\.sharpness), range: 0...100, model: model)
                 EditorSliderRow("暗角", value: effects(\.vignette), range: -100...100, model: model)
@@ -113,8 +113,9 @@ struct EditorSliderRow: View {
             Slider(value: value, in: range, onEditingChanged: { editing in
                 if editing { model.beginContinuousEdit() } else { model.endContinuousEdit() }
             })
+            .accessibilityLabel(title)
+            .accessibilityValue(displayValue)
         }
-        .accessibilityElement(children: .combine)
     }
 
     private var displayValue: String {

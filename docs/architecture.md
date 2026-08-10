@@ -20,7 +20,11 @@ Phase 2 扩展了 `hsl` 与 `curves` 两个可编码子模型。HSL 通过一个
 
 `ImagePipeline` 是 actor：渲染在 actor 的串行执行器中完成，`CIContext` 在应用生命周期内复用。ViewModel 给每一次预览分配 generation，同时取消上一项任务；过期结果无法回写 UI。导入解码和完整导出均从 UI 状态分离，只有预览/导出状态更新发生在 MainActor。
 
+Phase 9.0 的 `EditorSessionStore` 也是 actor。它把当前源文件和较小的 JSON manifest 分开写入 `Application Support/PhotoEdit/CurrentSession`：新导入只保存一次原始字节，后续参数变化以 300 ms 去抖更新 `EditState`。单调 revision 阻止过期异步任务覆盖新会话；恢复时重新走 `ImageLoader`，再安装已保存状态并重新渲染，不会持久化 `CIImage` 或 Preview。关闭编辑器默认保留该会话，只有用户明确放弃时才清除。
+
 LUT 元数据与原始 `.cube` 文件分开保存：导入文件复制至 `Application Support/PhotoEdit/LUTs/imported`，目录元数据写入 `metadata.json`。内置 LUT 不可删除；导入 LUT 可重命名、收藏和删除。
+
+LUT 与预设资料库的 UI 操作统一由 `EditorViewModel` 捕获错误并呈现；会修改目录的操作在持久化失败时回滚内存状态。视频的异步 `AVVideoComposition` filter closure 直接传播逐帧处理错误，不再回退输出未处理原帧。
 
 预设采用 Codable JSON，保存 light/color/HSL/curve/detail/effects/LUT 与强度；除非创建时明确选择，否则不会写入 transform。`PresetRepository` 将库持久化到 `Application Support/PhotoEdit/Presets.json`，而 `AdjustmentClipboard` 保持应用内全部或分组选择性粘贴所需的值状态。
 

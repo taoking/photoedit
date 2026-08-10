@@ -13,8 +13,10 @@
 		08564BA571D43E0BBF6E3D7C /* BatchWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047E2AEF50C15C172E2F023F /* BatchWorkflowTests.swift */; };
 		08E312F792F11E95A2D0BA8B /* RAWImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A2CC41D9CD15145A21761D /* RAWImageSource.swift */; };
 		0AF529474891A950F5D61E70 /* HDRRendering.swift in Sources */ = {isa = PBXBuildFile; fileRef = E998E017A8A944327D98F0C3 /* HDRRendering.swift */; };
+		17D59BB920572E78B00D77E9 /* EditorSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4088C474A3451C53D490BFBB /* EditorSessionStore.swift */; };
 		2118C9FD463591AA0C1AB943 /* EditorChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF6632886617E168F1C8845 /* EditorChrome.swift */; };
 		2438A7C79B393E995E9D3C61 /* ImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */; };
+		28A136D4FD26AFA7507252E7 /* EditorSessionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD961656E883A8B73DA40758 /* EditorSessionStoreTests.swift */; };
 		2EB4E7AA9FCFF664191C1DED /* PresetRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DBFA4C155DDCE507248A676 /* PresetRepository.swift */; };
 		32708E3C2A2F9FDCF7633A5E /* AdjustmentClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56831466C51EE1F7C63336A1 /* AdjustmentClipboard.swift */; };
 		3B6FCE112AC1D6819CEFAEF2 /* HDRRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38563CD9109486D31D02CB00 /* HDRRenderingTests.swift */; };
@@ -36,6 +38,7 @@
 		912861023625EB1F952D98BA /* VideoEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08B42002C7552E42DA34566 /* VideoEditingTests.swift */; };
 		94BEFB05A72C76CCBAD1B6DA /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8706CA9D5A39A92A7EDAD53F /* EditorView.swift */; };
 		9D5A6076D1405C9087094A8A /* EditorAdjustmentPanels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859233541BB05CDADD47A2F0 /* EditorAdjustmentPanels.swift */; };
+		A1456E090BA9B3FC4D10A45C /* PhotoEditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C9F73DD5B96B4278A722B96 /* PhotoEditUITests.swift */; };
 		A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5764FA663230295540E60D4B /* LUTRepositoryTests.swift */; };
 		B494F13F2841F13EDF21CD31 /* LUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */; };
 		B4F9AC4370A419692834A614 /* VideoEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A080219CCFAE906C4BF449A /* VideoEditing.swift */; };
@@ -59,6 +62,13 @@
 			remoteGlobalIDString = 07366708990555EE3C6F1EBE;
 			remoteInfo = PhotoEdit;
 		};
+		A1F41359B3E5578D2C5BCD2B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1C5DF03D793779DC4B053333 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07366708990555EE3C6F1EBE;
+			remoteInfo = PhotoEdit;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -68,9 +78,11 @@
 		047E2AEF50C15C172E2F023F /* BatchWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchWorkflowTests.swift; sourceTree = "<group>"; };
 		154471C40FC2F383F7A1BD3D /* PresetRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetRepositoryTests.swift; sourceTree = "<group>"; };
 		165FC84A048BA7AC0120792A /* TestLUTFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestLUTFactory.swift; sourceTree = "<group>"; };
+		1D3D2A2C7575731419580188 /* PhotoEditUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PhotoEditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1DDFB7C02B46526D3CA01BC8 /* AdjustmentClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjustmentClipboardTests.swift; sourceTree = "<group>"; };
 		3786F07DA1FE230D30A39D40 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		38563CD9109486D31D02CB00 /* HDRRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRRenderingTests.swift; sourceTree = "<group>"; };
+		4088C474A3451C53D490BFBB /* EditorSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionStore.swift; sourceTree = "<group>"; };
 		4485F1963C17129A1731684D /* ImagePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipelineTests.swift; sourceTree = "<group>"; };
 		4A4156AFA0A557948972D5D5 /* RAWStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAWStateTests.swift; sourceTree = "<group>"; };
 		4DBFA4C155DDCE507248A676 /* PresetRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetRepository.swift; sourceTree = "<group>"; };
@@ -93,6 +105,7 @@
 		8BEF67F7A9096F9B1E36C625 /* ToneCurveProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveProcessor.swift; sourceTree = "<group>"; };
 		8E7E2A726FD7AEA0C4399D0B /* VideoEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditorView.swift; sourceTree = "<group>"; };
 		94A487360829FF393366AD85 /* EditorPreviewGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPreviewGeometryTests.swift; sourceTree = "<group>"; };
+		9C9F73DD5B96B4278A722B96 /* PhotoEditUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoEditUITests.swift; sourceTree = "<group>"; };
 		A08B42002C7552E42DA34566 /* VideoEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEditingTests.swift; sourceTree = "<group>"; };
 		A95E43ACBECD51CA7DE6E6A6 /* LUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUT.swift; sourceTree = "<group>"; };
 		C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagementTests.swift; sourceTree = "<group>"; };
@@ -107,6 +120,7 @@
 		F0B7FE97F7E637613A4BE842 /* PreviewGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewGeometry.swift; sourceTree = "<group>"; };
 		F34F300D2B1E9C4A4C9B5378 /* ImagePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipeline.swift; sourceTree = "<group>"; };
 		F7D991F48E455171230EDBD4 /* CUBEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CUBEParser.swift; sourceTree = "<group>"; };
+		FD961656E883A8B73DA40758 /* EditorSessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSessionStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -115,6 +129,7 @@
 			children = (
 				5D2B9E87DDAE04AB9DBB3AB6 /* PhotoEdit.app */,
 				6420A4B3586945F3BA83F4FD /* PhotoEditTests.xctest */,
+				1D3D2A2C7575731419580188 /* PhotoEditUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -127,6 +142,7 @@
 				C470F88CEAD207AA06C95362 /* ColorManagementTests.swift */,
 				0331CA37E856171BB2D3F821 /* CUBEParserTests.swift */,
 				94A487360829FF393366AD85 /* EditorPreviewGeometryTests.swift */,
+				FD961656E883A8B73DA40758 /* EditorSessionStoreTests.swift */,
 				602D6A07AAD8A96DF89F05A6 /* EditStateTests.swift */,
 				38563CD9109486D31D02CB00 /* HDRRenderingTests.swift */,
 				4485F1963C17129A1731684D /* ImagePipelineTests.swift */,
@@ -165,6 +181,7 @@
 			children = (
 				801CCF7D68CA319495A55193 /* PhotoEdit */,
 				24CFF860F5FF3C016CDBD4C1 /* PhotoEditTests */,
+				BC81232FBABBE27B11D19F7D /* PhotoEditUITests */,
 				157E17C0614B574EF14EA4D0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -228,6 +245,15 @@
 			path = Export;
 			sourceTree = "<group>";
 		};
+		BC81232FBABBE27B11D19F7D /* PhotoEditUITests */ = {
+			isa = PBXGroup;
+			children = (
+				9C9F73DD5B96B4278A722B96 /* PhotoEditUITests.swift */,
+			);
+			name = PhotoEditUITests;
+			path = Tests/PhotoEditUITests;
+			sourceTree = "<group>";
+		};
 		D7D9D1AD10758CDE7B1C0EBA /* Video */ = {
 			isa = PBXGroup;
 			children = (
@@ -259,6 +285,7 @@
 			children = (
 				859233541BB05CDADD47A2F0 /* EditorAdjustmentPanels.swift */,
 				7DF6632886617E168F1C8845 /* EditorChrome.swift */,
+				4088C474A3451C53D490BFBB /* EditorSessionStore.swift */,
 				8706CA9D5A39A92A7EDAD53F /* EditorView.swift */,
 				782C7F54CD612543B62468AE /* EditorViewModel.swift */,
 				F0B7FE97F7E637613A4BE842 /* PreviewGeometry.swift */,
@@ -295,6 +322,24 @@
 			productReference = 5D2B9E87DDAE04AB9DBB3AB6 /* PhotoEdit.app */;
 			productType = "com.apple.product-type.application";
 		};
+		0D7AAD9827FBA43FA769C005 /* PhotoEditUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 759778600457522B49EF0140 /* Build configuration list for PBXNativeTarget "PhotoEditUITests" */;
+			buildPhases = (
+				4E3EE83F1B77331DD8A5BA20 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CBE14AD7E14F180E4B82E257 /* PBXTargetDependency */,
+			);
+			name = PhotoEditUITests;
+			packageProductDependencies = (
+			);
+			productName = PhotoEditUITests;
+			productReference = 1D3D2A2C7575731419580188 /* PhotoEditUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		3CDAF3960DC366E24A4B620D /* PhotoEditTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E997577FFE1E6149C9087F14 /* Build configuration list for PBXNativeTarget "PhotoEditTests" */;
@@ -326,6 +371,10 @@
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
+					0D7AAD9827FBA43FA769C005 = {
+						DevelopmentTeam = "";
+						TestTargetID = 07366708990555EE3C6F1EBE;
+					};
 					3CDAF3960DC366E24A4B620D = {
 						DevelopmentTeam = "";
 					};
@@ -347,6 +396,7 @@
 			targets = (
 				07366708990555EE3C6F1EBE /* PhotoEdit */,
 				3CDAF3960DC366E24A4B620D /* PhotoEditTests */,
+				0D7AAD9827FBA43FA769C005 /* PhotoEditUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -373,6 +423,7 @@
 				F879A1DD6B8DDC573EF7C6C9 /* ColorManagementTests.swift in Sources */,
 				59E5BD08BB057AD3E2E70AD0 /* EditStateTests.swift in Sources */,
 				73A1298CB6FF7A1A88CCEEFE /* EditorPreviewGeometryTests.swift in Sources */,
+				28A136D4FD26AFA7507252E7 /* EditorSessionStoreTests.swift in Sources */,
 				3B6FCE112AC1D6819CEFAEF2 /* HDRRenderingTests.swift in Sources */,
 				DD3C7BD568BEA21919B2F617 /* ImagePipelineTests.swift in Sources */,
 				A1BA404516964F7520965079 /* LUTRepositoryTests.swift in Sources */,
@@ -381,6 +432,14 @@
 				01DF6202A2B3C9F65C7DA891 /* RAWStateTests.swift in Sources */,
 				E771E7D2BC1B65713A2F0510 /* TestLUTFactory.swift in Sources */,
 				912861023625EB1F952D98BA /* VideoEditingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4E3EE83F1B77331DD8A5BA20 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1456E090BA9B3FC4D10A45C /* PhotoEditUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +454,7 @@
 				02C911BA70490726C694869A /* EditState.swift in Sources */,
 				9D5A6076D1405C9087094A8A /* EditorAdjustmentPanels.swift in Sources */,
 				2118C9FD463591AA0C1AB943 /* EditorChrome.swift in Sources */,
+				17D59BB920572E78B00D77E9 /* EditorSessionStore.swift in Sources */,
 				94BEFB05A72C76CCBAD1B6DA /* EditorView.swift in Sources */,
 				DF1AEE3F265024984D5E59A1 /* EditorViewModel.swift in Sources */,
 				0AF529474891A950F5D61E70 /* HDRRendering.swift in Sources */,
@@ -425,6 +485,11 @@
 			isa = PBXTargetDependency;
 			target = 07366708990555EE3C6F1EBE /* PhotoEdit */;
 			targetProxy = 614C81566961488DBA210E6A /* PBXContainerItemProxy */;
+		};
+		CBE14AD7E14F180E4B82E257 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07366708990555EE3C6F1EBE /* PhotoEdit */;
+			targetProxy = A1F41359B3E5578D2C5BCD2B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -502,6 +567,40 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		7B0DECB3618F2D554A0EA622 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.taoking.PhotoEditUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PhotoEdit;
+			};
+			name = Debug;
+		};
+		7F71BD07B4B66F226D227FCE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.taoking.PhotoEditUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PhotoEdit;
 			};
 			name = Release;
 		};
@@ -628,6 +727,15 @@
 			buildConfigurations = (
 				8AD23A238ABA2EEA383616BC /* Debug */,
 				EDE2F76F55AF4E9176AAC52A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		759778600457522B49EF0140 /* Build configuration list for PBXNativeTarget "PhotoEditUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7B0DECB3618F2D554A0EA622 /* Debug */,
+				7F71BD07B4B66F226D227FCE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -30,8 +30,10 @@ final class LUTRepository: ObservableObject {
         try ensureStorageDirectory()
         let id = UUID()
         let filename = "\(id.uuidString).cube"
-        try data.write(to: storageDirectory.appendingPathComponent(filename), options: .atomic)
+        let fileURL = storageDirectory.appendingPathComponent(filename)
+        try data.write(to: fileURL, options: .atomic)
         let originalName = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = items
         items.append(LUTCatalogItem(
             id: id,
             name: originalName.isEmpty ? (parsed.title ?? "Imported LUT") : originalName,
@@ -41,37 +43,62 @@ final class LUTRepository: ObservableObject {
             dimension: parsed.dimension,
             importedAt: .now
         ))
-        try saveCatalog()
+        do { try saveCatalog() }
+        catch {
+            items = previous
+            try? fileManager.removeItem(at: fileURL)
+            throw error
+        }
     }
 
     func rename(id: UUID, to newName: String) throws {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let previous = items
         items[index].name = name
-        try saveCatalog()
+        do { try saveCatalog() }
+        catch {
+            items = previous
+            throw error
+        }
     }
 
     func delete(id: UUID) throws {
         guard let item = items.first(where: { $0.id == id }), item.source == .imported else { return }
+        let previous = items
+        items.removeAll { $0.id == id }
+        do { try saveCatalog() }
+        catch {
+            items = previous
+            throw error
+        }
         if let fileName = item.fileName {
             let url = storageDirectory.appendingPathComponent(fileName)
             if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
         }
-        items.removeAll { $0.id == id }
-        try saveCatalog()
     }
 
     func toggleFavorite(id: UUID) throws {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let previous = items
         items[index].isFavorite.toggle()
-        try saveCatalog()
+        do { try saveCatalog() }
+        catch {
+            items = previous
+            throw error
+        }
     }
 
     func configure(id: UUID, kind: LUTKind, colorMetadata: LUTColorMetadata) throws {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let previous = items
         items[index].kind = kind
         items[index].colorMetadata = colorMetadata
-        try saveCatalog()
+        do { try saveCatalog() }
+        catch {
+            items = previous
+            throw error
+        }
     }
 
     func lut(for id: UUID) throws -> LUT {

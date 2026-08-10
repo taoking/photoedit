@@ -155,7 +155,7 @@ enum VideoFrameProcessor {
         // 最低系统为 iOS 26；统一使用当前 value-type filtering API。初始化器会按
         // preferredTransform 建立 renderSize，像素方向仍只在 apply 中转换一次。
         return try await AVVideoComposition(applyingFiltersTo: asset) { parameters in
-            let output = (try? apply(parameters.sourceImage, state: state, lut: lut, transform: transform)) ?? parameters.sourceImage
+            let output = try apply(parameters.sourceImage, state: state, lut: lut, transform: transform)
             return AVCIImageFilteringResult(resultImage: output, ciContext: renderContext.context)
         }
     }

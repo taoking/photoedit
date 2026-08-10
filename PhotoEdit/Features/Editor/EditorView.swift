@@ -11,7 +11,8 @@ private enum EditorSecondarySurface: String, Identifiable {
 }
 
 struct EditorView: View {
-    @StateObject private var model = EditorViewModel()
+    @StateObject private var model: EditorViewModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingImageImporter = false
     @State private var showingVideoImporter = false
@@ -33,11 +34,25 @@ struct EditorView: View {
     @State private var secondarySurface: EditorSecondarySurface?
     @State private var tool: EditorTool = .light
     @State private var isParameterPanelExpanded = false
+    @State private var showingCloseConfirmation = false
+    @State private var didInstallUITestFixture = false
     @State private var zoom: CGFloat = 1
     @State private var pan = CGSize.zero
     @State private var previewCanvasSize = CGSize.zero
     @GestureState private var gestureMagnification: CGFloat = 1
     @GestureState private var gestureTranslation = CGSize.zero
+
+    init() {
+        #if DEBUG
+        let isUITesting = ProcessInfo.processInfo.arguments.contains("-ui-testing-editor")
+        #else
+        let isUITesting = false
+        #endif
+        _model = StateObject(wrappedValue: EditorViewModel(
+            sessionStore: .shared,
+            restoresSessionAutomatically: !isUITesting
+        ))
+    }
 
     var body: some View {
         Group {
@@ -51,6 +66,7 @@ struct EditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
         .tint(.cyan)
+        .task { installUITestFixtureIfRequested() }
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task {
@@ -155,6 +171,13 @@ struct EditorView: View {
         } message: {
             Text(model.errorMessage ?? "未知错误")
         }
+        .confirmationDialog("关闭当前照片", isPresented: $showingCloseConfirmation, titleVisibility: .visible) {
+            Button("保留编辑并返回首页") { performClose(discardSession: false) }
+            Button("放弃编辑并关闭", role: .destructive) { performClose(discardSession: true) }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("当前调整已经自动保存。保留后可从导入页继续编辑；放弃会删除本次会话。")
+        }
         .fullScreenCover(isPresented: Binding(
             get: { selectedVideoURL != nil },
             set: { if !$0 { selectedVideoURL = nil } }
@@ -177,6 +200,18 @@ struct EditorView: View {
                     .foregroundStyle(.white.opacity(0.72))
             } actions: {
                 VStack(spacing: 12) {
+                    if model.isRestoringSession {
+                        ProgressView("正在恢复上次编辑")
+                            .tint(.cyan)
+                    } else if model.hasRestorableSession {
+                        Button {
+                            model.restoreSavedSession()
+                        } label: {
+                            Label("继续上次编辑", systemImage: "clock.arrow.circlepath")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Label("从照片导入", systemImage: "photo")
                             .frame(maxWidth: .infinity)
@@ -204,19 +239,32 @@ struct EditorView: View {
 
     private var editor: some View {
         GeometryReader { screen in
+            let isLandscape = screen.size.width > screen.size.height
+            let safeHeight = screen.size.height - screen.safeAreaInsets.top - screen.safeAreaInsets.bottom
+
             VStack(spacing: 0) {
                 editorToolbar
                     .padding(.horizontal, 12)
                     .padding(.top, screen.safeAreaInsets.top + 8)
                     .padding(.bottom, 6)
 
-                // 预览只占用工具栏和控制区之间实际可见的工作区，绝不在控件下方延伸。
-                previewCanvas
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if isLandscape {
+                    HStack(spacing: 0) {
+                        previewWorkspace
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                editorControls(availableHeight: screen.size.height - screen.safeAreaInsets.top - screen.safeAreaInsets.bottom)
-                    .padding(.bottom, screen.safeAreaInsets.bottom)
-                    .background(Color.photoEditControlSurface)
+                        editorControls(availableHeight: safeHeight, isLandscape: true)
+                            .frame(width: landscapeControlsWidth(for: screen.size.width))
+                            .frame(maxHeight: .infinity)
+                            .padding(.bottom, screen.safeAreaInsets.bottom)
+                    }
+                } else {
+                    previewWorkspace
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    editorControls(availableHeight: safeHeight, isLandscape: false)
+                        .padding(.bottom, screen.safeAreaInsets.bottom)
+                }
             }
             // 根视图没有 NavigationStack；明确填满 WindowGroup，避免 GeometryReader
             // 以最小理想高度居中，造成预览或工具栏被截断。
@@ -227,9 +275,22 @@ struct EditorView: View {
         .background(Color.photoEditWorkspace.ignoresSafeArea())
     }
 
+    private var previewWorkspace: some View {
+        ZStack(alignment: .bottom) {
+            previewCanvas
+            if model.isExporting {
+                ExportStatusBar(cancel: model.cancelExport)
+                    .padding(12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.isExporting)
+    }
+
     private var editorToolbar: some View {
         EditorTopBar(
             canUndo: model.canUndo,
+            isExporting: model.isExporting,
             close: closeCurrentPhoto,
             undo: model.undo,
             export: { showingExportOptions = true },
@@ -358,13 +419,13 @@ struct EditorView: View {
             .accessibilityLabel(model.isShowingBefore ? "原图预览" : "编辑结果预览")
     }
 
-    private func editorControls(availableHeight: CGFloat) -> some View {
+    private func editorControls(availableHeight: CGFloat, isLandscape: Bool) -> some View {
         VStack(spacing: 0) {
             if isParameterPanelExpanded {
                 EditorParameterPanel(tool: tool, collapse: toggleParameterPanel) {
                     parameterPanelContent
                 }
-                .frame(height: parameterPanelHeight(for: availableHeight))
+                .frame(height: parameterPanelHeight(for: availableHeight, isLandscape: isLandscape))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -397,7 +458,7 @@ struct EditorView: View {
         EditorTool.allCases.filter { $0 != .raw || model.asset?.isRAW == true }
     }
 
-    private func parameterPanelHeight(for availableHeight: CGFloat) -> CGFloat {
+    private func parameterPanelHeight(for availableHeight: CGFloat, isLandscape: Bool) -> CGFloat {
         let preferredHeight: CGFloat = switch tool {
         case .light, .color: 214
         case .detail: 184
@@ -407,10 +468,17 @@ struct EditorView: View {
         case .local, .raw: 240
         }
 
-        // 横屏时参数区不应吞掉照片工作区；纵屏仍保持各面板的完整常用高度。
         guard availableHeight.isFinite, availableHeight > 0 else { return preferredHeight }
-        let adaptiveLimit = Swift.max(132, Swift.min(260, availableHeight * 0.32))
-        return Swift.min(preferredHeight, adaptiveLimit)
+        if isLandscape {
+            return Swift.max(150, availableHeight - (dynamicTypeSize.isAccessibilitySize ? 82 : 70))
+        }
+        let fraction: CGFloat = dynamicTypeSize.isAccessibilitySize ? 0.48 : 0.38
+        let adaptiveLimit = Swift.max(160, Swift.min(dynamicTypeSize.isAccessibilitySize ? 340 : 280, availableHeight * fraction))
+        return Swift.min(Swift.max(preferredHeight, dynamicTypeSize.isAccessibilitySize ? 260 : preferredHeight), adaptiveLimit)
+    }
+
+    private func landscapeControlsWidth(for width: CGFloat) -> CGFloat {
+        Swift.min(390, Swift.max(310, width * (dynamicTypeSize.isAccessibilitySize ? 0.44 : 0.38)))
     }
 
     private var displayedZoom: CGFloat {
@@ -431,8 +499,16 @@ struct EditorView: View {
     }
 
     private func closeCurrentPhoto() {
+        if model.hasEdits {
+            showingCloseConfirmation = true
+        } else {
+            performClose(discardSession: false)
+        }
+    }
+
+    private func performClose(discardSession: Bool) {
         selectedPhoto = nil
-        model.closeCurrentAsset()
+        model.closeCurrentAsset(discardSession: discardSession)
         tool = .light
         isParameterPanelExpanded = false
         resetViewport()
@@ -441,6 +517,28 @@ struct EditorView: View {
     private func resetViewport() {
         zoom = 1
         pan = .zero
+    }
+
+    private func installUITestFixtureIfRequested() {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-ui-testing-editor"),
+              !didInstallUITestFixture else { return }
+        didInstallUITestFixture = true
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing-expanded") {
+            tool = .light
+            isParameterPanelExpanded = true
+        }
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 1200))
+        let image = renderer.image { context in
+            UIColor(red: 0.12, green: 0.18, blue: 0.28, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 900, height: 1200))
+            UIColor(red: 0.16, green: 0.62, blue: 0.76, alpha: 1).setFill()
+            context.fill(CGRect(x: 120, y: 180, width: 660, height: 840))
+        }
+        if let data = image.jpegData(compressionQuality: 0.9) {
+            model.loadImage(data: data, sourceName: "UI-Test.jpg")
+        }
+        #endif
     }
 
     private func imageGesture(for imageSize: CGSize, in canvasSize: CGSize) -> some Gesture {
@@ -492,7 +590,7 @@ struct EditorView: View {
                 model: model,
                 showingImporter: $showingPresetImporter,
                 exportPreset: { id, name in
-                    guard let data = try? model.presetRepository.exportData(id: id) else { return }
+                    guard let data = model.exportPresetData(id: id) else { return }
                     presetDocument = PresetDocument(data: data)
                     presetFilename = name + ".json"
                     showingPresetFileExporter = true
@@ -784,7 +882,8 @@ private struct ToneCurvePanel: View {
             )
             .padding()
         } else {
-            VStack(spacing: 10) {
+            ScrollView {
+                VStack(spacing: 10) {
             HStack {
                 Picker("通道", selection: $channel) {
                     ForEach(ToneCurveChannel.allCases) { Text($0.title).tag($0) }
@@ -842,6 +941,7 @@ private struct ToneCurvePanel: View {
                 Spacer()
             }
             .padding([.horizontal, .bottom])
+                }
             }
         }
     }
@@ -926,10 +1026,10 @@ private struct PresetPanel: View {
                                 .padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                             }
                             .contextMenu {
-                                Button(preset.isFavorite ? "取消收藏" : "收藏", systemImage: preset.isFavorite ? "star.slash" : "star") { try? model.presetRepository.toggleFavorite(id: preset.id) }
+                                Button(preset.isFavorite ? "取消收藏" : "收藏", systemImage: preset.isFavorite ? "star.slash" : "star") { model.togglePresetFavorite(id: preset.id) }
                                 Button("重命名", systemImage: "pencil") { renaming = preset; renameText = preset.name }
                                 Button("导出 JSON", systemImage: "square.and.arrow.up") { exportPreset(preset.id, preset.name) }
-                                Button("删除", systemImage: "trash", role: .destructive) { try? model.presetRepository.delete(id: preset.id) }
+                                Button("删除", systemImage: "trash", role: .destructive) { model.deletePreset(id: preset.id) }
                             }
                         }
                     }
@@ -942,7 +1042,7 @@ private struct PresetPanel: View {
             TextField("名称", text: $renameText)
             Button("取消", role: .cancel) { renaming = nil }
             Button("保存") {
-                if let preset = renaming { try? model.presetRepository.rename(id: preset.id, to: renameText) }
+                if let preset = renaming { model.renamePreset(id: preset.id, to: renameText) }
                 renaming = nil
             }
         }
@@ -1009,8 +1109,9 @@ private struct LUTPanel: View {
     @State private var renameText = ""
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
+        ScrollView {
+            VStack(spacing: 8) {
+                HStack {
                 Picker("LUT 分类", selection: $section) {
                     ForEach(LUTLibrarySection.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -1043,7 +1144,7 @@ private struct LUTPanel: View {
                             .onTapGesture { model.selectLUT(item.id) }
                             .contextMenu {
                                 Button(item.isFavorite ? "取消收藏" : "收藏", systemImage: item.isFavorite ? "star.slash" : "star") {
-                                    try? model.lutRepository.toggleFavorite(id: item.id)
+                                    model.toggleLUTFavorite(id: item.id)
                                 }
                                 colorConfigurationMenu(for: item)
                                 if item.source == .imported {
@@ -1052,9 +1153,7 @@ private struct LUTPanel: View {
                                         renameText = item.name
                                     }
                                     Button("删除", systemImage: "trash", role: .destructive) {
-                                        if model.state.lut.selectedLUTID == item.id { model.selectLUT(nil) }
-                                        if model.state.lut.technicalLUTID == item.id { model.selectTechnicalLUT(nil) }
-                                        try? model.lutRepository.delete(id: item.id)
+                                        model.deleteLUT(id: item.id)
                                     }
                                 }
                             }
@@ -1083,6 +1182,7 @@ private struct LUTPanel: View {
                     Menu("配置 \(item.name)") { colorConfigurationMenu(for: item) }
                         .padding(.horizontal)
                 }
+                }
             }
         }
         .alert("重命名 LUT", isPresented: Binding(
@@ -1091,7 +1191,7 @@ private struct LUTPanel: View {
             TextField("名称", text: $renameText)
             Button("取消", role: .cancel) { renameItem = nil }
             Button("保存") {
-                if let item = renameItem { try? model.lutRepository.rename(id: item.id, to: renameText) }
+                if let item = renameItem { model.renameLUT(id: item.id, to: renameText) }
                 renameItem = nil
             }
         }

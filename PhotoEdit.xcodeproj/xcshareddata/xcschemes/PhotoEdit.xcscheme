@@ -35,6 +35,20 @@
                ReferencedContainer = "container:PhotoEdit.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0D7AAD9827FBA43FA769C005"
+               BuildableName = "PhotoEditUITests.xctest"
+               BlueprintName = "PhotoEditUITests"
+               ReferencedContainer = "container:PhotoEdit.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -62,6 +76,17 @@
                BlueprintIdentifier = "3CDAF3960DC366E24A4B620D"
                BuildableName = "PhotoEditTests.xctest"
                BlueprintName = "PhotoEditTests"
+               ReferencedContainer = "container:PhotoEdit.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0D7AAD9827FBA43FA769C005"
+               BuildableName = "PhotoEditUITests.xctest"
+               BlueprintName = "PhotoEditUITests"
                ReferencedContainer = "container:PhotoEdit.xcodeproj">
             </BuildableReference>
          </TestableReference>

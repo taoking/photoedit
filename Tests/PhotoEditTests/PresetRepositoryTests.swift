@@ -34,4 +34,14 @@ final class PresetRepositoryTests: XCTestCase {
         try reloaded.delete(id: preset.id)
         XCTAssertNil(reloaded.preset(id: preset.id))
     }
+
+    func testFailedSaveRollsBackInMemoryPresetMutation() throws {
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: storage) }
+        try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
+        let repository = PresetRepository(storageURL: storage)
+
+        XCTAssertThrowsError(try repository.create(name: "Cannot Save", state: .initial, includesTransform: false))
+        XCTAssertTrue(repository.presets.isEmpty)
+    }
 }

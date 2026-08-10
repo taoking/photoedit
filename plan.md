@@ -931,3 +931,19 @@ RAW + Batch
 - [x] Phase 8.5 iPhone editor UX redesign — 重构照片优先的编辑信息架构、可收起参数面板、连续手势与 AppIcon；模拟器已截图检查，真机多点手势与真实照片显示仍须手动确认
 - [x] Phase 8.5 iPhone preview-fit review fixes — 使预览按可见编辑视口适配，统一缩放/平移几何并补回归测试；已通过模拟器截图与构建验证，iPhone 已安装但因锁屏无法远程启动，连续手势仍待解锁后手动确认
 - [x] Phase 8.5 iPhone 真机预览裁切修复 — 让 HDR `UIImageView` 接受 SwiftUI 的等比适配尺寸；已通过 76 项测试、iPhone 16 Pro 实际导入竖图截图与真机安装验证，并已合并至 `main`
+
+项目审计与后续迭代评估（2026-08-10）：
+
+- [x] 盘点现有功能、架构、测试与已知限制
+- [x] 在 iPhone 模拟器复核导入、编辑工具、手势、菜单与导出核心流程
+- [x] 从 UI、交互、设计感、操作性、功能性五个维度形成问题分级
+- [x] 给出下一阶段迭代优先级、验收标准与建议路线图（见 `docs/project-audit-roadmap.md`）
+
+Phase 9.0 — Product Usability & Session Reliability：
+
+- [x] 重构竖屏/横屏/Dynamic Type 自适应编辑布局，消除面板内容遮挡
+- [x] 增加当前编辑会话自动保存、恢复与关闭保护
+- [x] 增加单图导出持久状态、取消入口与重复提交保护
+- [x] 消除视频渲染及 LUT/预设资料库操作的静默失败
+- [x] 增加核心 UI/状态回归测试并完成 Build、截图与真机验证
+- [x] 更新开发进度与验收文档
